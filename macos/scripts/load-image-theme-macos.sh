@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Dynamically load one pure image as the active theme.
-# Hot-applies when CDP is already open (fast).
+# Hot-applies through a short Node Inspector pulse.
 
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd -P)/common-macos.sh"
@@ -136,11 +136,7 @@ if [ "$APPLY_NOW" != "true" ]; then
   exit 0
 fi
 
-PORT=9341
-if [ -f "$STATE_PATH" ]; then
-  saved="$(state_field port 2>/dev/null || true)"
-  [ -n "${saved:-}" ] && PORT="$saved"
-fi
+PORT="$INSPECTOR_PORT"
 
 progress "Hot reapply..."
 if hot_reapply_theme "$PORT" 8000; then
@@ -148,8 +144,8 @@ if hot_reapply_theme "$PORT" 8000; then
   exit 0
 fi
 
-progress "CDP not ready, full start..."
-if "$SCRIPT_DIR/start-dream-skin-macos.sh" --port "$PORT" --restart-existing; then
+progress "Opening ChatGPT and applying..."
+if "$SCRIPT_DIR/start-dream-skin-macos.sh"; then
   progress "Done: ${THEME_NAME}"
   exit 0
 fi

@@ -8,7 +8,7 @@
 4. Decorative layers have `pointer-events: none`; no screenshot or raster UI is used as an overlay.
 5. Route changes, renderer reloads, and ordinary refreshes reapply the current theme while the verified injector runs.
 6. Official application signature and `app.asar` remain unchanged.
-7. Restore removes live DOM/CSS, restores the two saved base-theme values, closes the CDP session after restart, and supports later reinstallation.
+7. Restore removes live DOM/CSS and main-process hooks, restores the two saved base-theme values, closes Inspector after the removal pulse, and supports later reinstallation.
 
 ## Automated checks
 
@@ -37,6 +37,6 @@
 - Run `tests/run-tests.sh` successfully.
 - Install from a clean extracted copy with no global Node.js.
 - Complete install → live verify → reload verify → restore → reinstall.
-- Capture a real CDP screenshot and retain the verifier JSON.
+- Capture a real main-window screenshot through the Inspector pulse and retain the verifier JSON.
 - Confirm `codesign --verify --deep --strict` still succeeds for the official Codex app.
 - Build ZIP and record SHA-256.

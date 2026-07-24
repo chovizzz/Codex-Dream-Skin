@@ -69,11 +69,11 @@ UPDATE_JSON="$({
 })"
 "$NODE" -e '
   const value = JSON.parse(process.argv[1]);
-  if (value.currentVersion !== "v1.3.3" || value.latestVersion !== "v9.8.7") process.exit(1);
+  if (value.currentVersion !== "v1.4.0" || value.latestVersion !== "v9.8.7") process.exit(1);
   if (!value.updateAvailable) process.exit(1);
-  if (value.releaseUrl !== "https://github.com/Fei-Away/Codex-Dream-Skin/releases/latest") process.exit(1);
+  if (value.releaseUrl !== "https://github.com/chovizzz/Codex-Dream-Skin/releases/latest") process.exit(1);
 ' "$UPDATE_JSON"
-if /usr/bin/grep -R -n -E --exclude-dir='.build' \
+if /usr/bin/grep -R -n -E --exclude-dir='.build*' \
   'xattr|spctl[[:space:]]+--master-disable' \
   "$ROOT/menubar-app" "$ROOT/scripts/build-menubar-app.sh" "$ROOT/scripts/build-dmg.sh" >/dev/null; then
   printf 'Native distribution must not bypass Gatekeeper or remove quarantine attributes.\n' >&2
@@ -96,6 +96,12 @@ if ! /usr/bin/grep -F -q 'DEPLOY_PREVIOUS' "$ROOT/scripts/install-dream-skin-mac
 fi
 if ! /usr/bin/grep -F -q 'INSTALL_ROOT.broken' "$ROOT/scripts/install-dream-skin-macos.sh"; then
   printf 'Installer rollback must detach the broken engine with a rename instead of rm -rf on the live root.\n' >&2
+  exit 1
+fi
+if ! /usr/bin/grep -F -q 'inspector-pulse.mjs' "$ROOT/scripts/build-menubar-app.sh" \
+  || ! /usr/bin/grep -F -q 'scripts/inspector-pulse.mjs' \
+    "$ROOT/menubar-app/Sources/CodexDreamSkinMenuBar/AppDelegate.swift"; then
+  printf 'The native macOS package must include and validate inspector-pulse.mjs.\n' >&2
   exit 1
 fi
 INSTALL_GUARD_LINE="$(/usr/bin/grep -n 'codex_is_running && fail "Close Codex before installation' \
@@ -138,6 +144,7 @@ fi
 "$NODE" "$ROOT/scripts/injector.mjs" --check-payload >/dev/null
 "$NODE" "$ROOT/tests/image-metadata.test.mjs"
 "$NODE" "$ROOT/tests/injector-bootstrap.test.mjs"
+"$NODE" "$ROOT/tests/inspector-pulse.test.mjs"
 "$NODE" "$ROOT/tests/renderer-inject.test.mjs"
 "$NODE" "$ROOT/tests/theme-stage.test.mjs"
 
@@ -386,9 +393,8 @@ UNTRUSTED_TEAM_ID="TEAM'ID"
   . "$1/scripts/common-macos.sh"
   CODEX_EXE="/bin/bash"
   pid_is_codex_executable "$$"
-  pid_is_codex_descendant "$$"
   process_executable_path() { printf "/bin/zsh\n"; }
-  if pid_is_codex_executable "$$" || pid_is_codex_descendant "$$"; then exit 1; fi
+  if pid_is_codex_executable "$$"; then exit 1; fi
 ' _ "$ROOT"
 
 run_signed_runtime_state_tests() {
@@ -516,10 +522,10 @@ STATUS_JSON="$(/usr/bin/env HOME="$STATUS_HOME" "$ROOT/scripts/status-dream-skin
 wait "$STATUS_PID" 2>/dev/null || true
 STATUS_PID=""
 
-# The common stop path must reject a real watcher running on 19341 when the
+# The common stop path must reject a real pulse watcher running on 19341 when the
 # saved state claims 1934, even though nodePath/injectorPath/start-time all
 # match. This exercises the signal gate directly (status has its own matcher).
-"$NODE" "$ROOT/scripts/injector.mjs" --watch --port 19341 --theme-dir "$ROOT/presets/preset-gothic-void-crusade" \
+"$NODE" "$STATUS_FAKE_INJECTOR" --watch --port 19341 --theme-dir "$ROOT/presets/preset-gothic-void-crusade" \
   >"$TMP/near-prefix-injector.out" 2>&1 &
 WATCH_PID="$!"
 /bin/sleep 0.2
@@ -537,7 +543,7 @@ WATCH_START="$(/bin/ps -p "$WATCH_PID" -o lstart= 2>/dev/null | /usr/bin/awk '{$
     injectorPath: injector,
     nodePath: node,
   })}\n`);
-' "$STOP_STATE_ROOT/state.json" "$WATCH_PID" "$NODE" "$ROOT/scripts/injector.mjs" "$WATCH_START"
+' "$STOP_STATE_ROOT/state.json" "$WATCH_PID" "$NODE" "$STATUS_FAKE_INJECTOR" "$WATCH_START"
 if /usr/bin/env HOME="$STOP_HOME" NODE="$NODE" /bin/bash -c '
   . "$1/scripts/common-macos.sh"
   INJECTOR_JOB_LABEL="$2"
@@ -554,13 +560,13 @@ WATCH_PID=""
 # A failed start must prove the recorded watcher stopped before deleting its
 # state; this static guard prevents the old launchctl-short-circuit cleanup.
 /usr/bin/grep -F -q 'set -Eeuo pipefail' "$ROOT/scripts/start-dream-skin-macos.sh"
-/usr/bin/grep -F -q 'if "$NODE" "$INJECTOR" --verify' \
+/usr/bin/grep -F -q 'if ! "$NODE" "$PULSE" --apply' \
   "$ROOT/scripts/start-dream-skin-macos.sh"
 if /usr/bin/grep -F -q 'set +e' "$ROOT/scripts/start-dream-skin-macos.sh"; then
   printf 'start script still disables errexit around expected verify retries.\n' >&2
   exit 1
 fi
-/usr/bin/grep -F -q 'if ! stop_recorded_injector; then' \
+/usr/bin/grep -F -q 'Could not stop the recorded injector; state was preserved.' \
   "$ROOT/scripts/start-dream-skin-macos.sh"
 if /usr/bin/grep -F -q 'launchctl remove "$INJECTOR_JOB_LABEL" >/dev/null 2>&1 || /bin/kill -TERM "$INJECTOR_PID"' \
   "$ROOT/scripts/start-dream-skin-macos.sh"; then
@@ -926,7 +932,7 @@ CRLF_BACKUP="$TMP/config-crlf-backup.json"
 "$NODE" "$ROOT/scripts/theme-config.mjs" restore "$CRLF_CONFIG" "$CRLF_BACKUP" >/dev/null
 /usr/bin/cmp -s "$CRLF_CONFIG" "$TMP/original-crlf.toml"
 
-/usr/bin/env -u HOME /bin/bash -c '. "$1/scripts/common-macos.sh"; [ -n "$HOME" ] && [ "$SKIN_VERSION" = "1.3.3" ]' _ "$ROOT"
+/usr/bin/env -u HOME /bin/bash -c '. "$1/scripts/common-macos.sh"; [ -n "$HOME" ] && [ "$SKIN_VERSION" = "1.4.0" ]' _ "$ROOT"
 if [ "${CODEX_DREAM_SKIN_SKIP_DOCTOR:-0}" = "1" ]; then
   printf 'SKIP: Doctor requires an installed, signed Codex app.\n'
   DOCTOR_RESULT="skipped"

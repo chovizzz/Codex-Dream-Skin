@@ -61,7 +61,7 @@ CHEAP_RUNNING="false"
 /usr/bin/pgrep -x ChatGPT >/dev/null 2>&1 && CHEAP_RUNNING="true"
 SESSION="off"
 THEME_NAME=""
-PORT="9341"
+PORT="9229"
 if [ -x "$SCRIPT_DIR/status-dream-skin-macos.sh" ]; then
   while IFS= read -r line; do
     case "$line" in
@@ -111,9 +111,9 @@ fi
 
 progress "检查 ChatGPT…"
 ensure_state_root
-progress "启动/连接调试口…"
+progress "执行短时 Inspector 注入…"
 
-"$SCRIPT_DIR/start-dream-skin-macos.sh" --restart-existing >>"$LOG_OUT" 2>&1
+"$SCRIPT_DIR/start-dream-skin-macos.sh" >>"$LOG_OUT" 2>&1
 code=$?
 
 if [ "$code" -eq 0 ]; then

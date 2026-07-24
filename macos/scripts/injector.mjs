@@ -37,7 +37,7 @@ const stableTestidLiteral = (testid) => {
   }
   return JSON.stringify(`[data-testid="${testid}"]`);
 };
-const SKIN_VERSION = "1.3.3";
+const SKIN_VERSION = "1.4.0";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const CDP_ID_PATTERN = /^[A-Za-z0-9._-]{1,200}$/;
 const MAX_ART_BYTES = 16 * 1024 * 1024;
@@ -618,7 +618,7 @@ function invalidateStaticPayloadAssets() {
   staticPayloadAssets = null;
 }
 
-async function loadPayload(themeDir) {
+export async function loadPayload(themeDir) {
   const startedAt = performance.now();
   const [staticAssets, loaded] = await Promise.all([
     loadStaticPayloadAssets(),
@@ -829,8 +829,8 @@ async function presentOperationUi(session, token, state, message, timeoutMs = 10
   return bestEffortOperationUi(session, "show", token, state, message, timeoutMs);
 }
 
-async function removeFromSession(session) {
-  return session.evaluate(`(() => {
+export function rendererRemoveExpression() {
+  return `(() => {
     window.__CODEX_DREAM_SKIN_DISABLED__ = true;
     const state = window.__CODEX_DREAM_SKIN_STATE__;
     let cleaned = false;
@@ -855,11 +855,15 @@ async function removeFromSession(session) {
     document.getElementById('codex-dream-skin-style')?.remove();
     delete window.__CODEX_DREAM_SKIN_STATE__;
     return true;
-  })()`);
+  })()`;
 }
 
-async function verifyRemovedSession(session) {
-  return session.evaluate(`(() => {
+async function removeFromSession(session) {
+  return session.evaluate(rendererRemoveExpression());
+}
+
+export function rendererVerifyRemovedExpression() {
+  return `(() => {
     const root = document.documentElement;
     const hasAttributes = [...root.attributes].some((attribute) =>
       attribute.name.startsWith('data-dream-'));
@@ -871,11 +875,15 @@ async function verifyRemovedSession(session) {
     return !hasAttributes && !hasVariables && !hasSheets &&
       !document.getElementById('codex-dream-skin-style') &&
       !window.__CODEX_DREAM_SKIN_STATE__;
-  })()`);
+  })()`;
 }
 
-async function verifySession(session, expectedThemeId = null, expectedRevision = null) {
-  return session.evaluate(`(() => {
+async function verifyRemovedSession(session) {
+  return session.evaluate(rendererVerifyRemovedExpression());
+}
+
+export function rendererVerifyExpression(expectedThemeId = null, expectedRevision = null) {
+  return `(() => {
     const box = (node) => {
       if (!node) return null;
       const r = node.getBoundingClientRect();
@@ -974,7 +982,11 @@ async function verifySession(session, expectedThemeId = null, expectedRevision =
       suggestionCardsOptional: result.homeRoute && result.visibleCardCount === 0,
     };
     return result;
-  })()`);
+  })()`;
+}
+
+async function verifySession(session, expectedThemeId = null, expectedRevision = null) {
+  return session.evaluate(rendererVerifyExpression(expectedThemeId, expectedRevision));
 }
 
 async function waitForVerifiedSession(session, timeoutMs, expectedThemeId = null, expectedRevision = null) {

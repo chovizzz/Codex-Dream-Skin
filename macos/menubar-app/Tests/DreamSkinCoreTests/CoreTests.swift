@@ -13,7 +13,7 @@ final class CoreTests: XCTestCase {
   }
 
   func testStatusSnapshotParsesChineseTheme() throws {
-    let data = Data(#"{"session":"active","operation":"","operationMessage":"","port":9341,"injectorAlive":true,"cdpOk":true,"codexRunning":true,"themeName":"中文主题","appliedThemeName":"中文主题"}"#.utf8)
+    let data = Data(#"{"session":"active","operation":"","operationMessage":"","port":9229,"injectorAlive":true,"cdpOk":false,"codexRunning":true,"themeName":"中文主题","appliedThemeName":"中文主题"}"#.utf8)
     let snapshot = try XCTUnwrap(StatusSnapshot(jsonData: data))
     XCTAssertEqual(snapshot.session, "active")
     XCTAssertEqual(snapshot.themeName, "中文主题")

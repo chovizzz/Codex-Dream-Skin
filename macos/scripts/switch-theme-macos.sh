@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Switch to a theme pack under themes/<id>/ — hot path when CDP is live.
+# Switch to a theme pack under themes/<id> and apply with an Inspector pulse.
 
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd -P)/common-macos.sh"
@@ -15,7 +15,7 @@ finish_switch() {
   [ -z "${stage:-}" ] || /bin/rm -rf "$stage"
   if [ "$code" -ne 0 ] && [ -n "${OPERATION_TOKEN:-}" ]; then
     write_operation_state failed "主题切换未完成，应用结果未确认" "$OPERATION_TOKEN" 2>/dev/null || true
-    finish_client_operation "${PORT:-9341}" error "主题切换未完成，应用结果未确认" \
+    finish_client_operation "${PORT:-9229}" error "主题切换未完成，应用结果未确认" \
       "$OPERATION_TOKEN" 1500 >/dev/null 2>&1 || true
   fi
 }
@@ -50,14 +50,7 @@ themes_root_real="$(cd "$THEMES_ROOT" && pwd -P)"
 src_real="$(cd "$SRC" && pwd -P)"
 case "$src_real/" in "$themes_root_real/"*) ;; *) fail "Theme directory escapes the saved theme library." ;; esac
 
-PORT=9341
-if [ -f "$STATE_PATH" ]; then
-  saved="$(state_field port 2>/dev/null || true)"
-  [ -n "${saved:-}" ] && PORT="$saved"
-fi
-if [ -n "$OPERATION_TOKEN" ] && verified_cdp_endpoint "$PORT" 2>/dev/null; then
-  begin_client_operation "$PORT" switch 3000 "$OPERATION_TOKEN" >/dev/null 2>&1 || true
-fi
+PORT="$INSPECTOR_PORT"
 
 progress() {
   printf '%s\n' "$*" >&2
@@ -104,15 +97,15 @@ if [ "$APPLY_NOW" != "true" ]; then
   exit 0
 fi
 
-# Hot path: CDP already open → seconds, not tens of seconds
+# Hot path: a short Inspector pulse updates the running app.
 if hot_reapply_theme "$PORT" 8000 "$OPERATION_TOKEN"; then
   progress "Done: ${THEME_NAME}"
   exit 0
 fi
 
-# Cold path only when debug port is missing
-progress "CDP not ready, full start..."
-if "$SCRIPT_DIR/start-dream-skin-macos.sh" --port "$PORT" --restart-existing; then
+# Cold path opens Codex normally, then pulses once.
+progress "Opening ChatGPT and applying..."
+if "$SCRIPT_DIR/start-dream-skin-macos.sh"; then
   progress "Done: ${THEME_NAME}"
   exit 0
 fi

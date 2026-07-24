@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Fast status for SwiftBar. No codesign / CDP probes by default.
+# Fast status for SwiftBar. No codesign or Inspector pulse is performed.
 
 set +e
 set -u
@@ -22,9 +22,11 @@ STATE_PATH="${STATE_ROOT}/state.json"
 OPERATION_STATE_PATH="${STATE_ROOT}/operation-state.plist"
 THEME_DIR="${STATE_ROOT}/theme"
 
-PORT="9341"
+PORT="9229"
 SESSION="off"
 INJECTOR_ALIVE="false"
+# Retained as cdpOk in the JSON schema for native-app backward compatibility.
+# Under pulse transport, false is the expected steady state.
 CDP_OK="false"
 THEME_NAME=""
 APPLIED_THEME_NAME=""
@@ -54,7 +56,7 @@ read_plist_snapshot_field() {
 }
 
 # Keep this check deliberately shell/ps-only: SwiftBar invokes status every
-# few seconds and must not perform codesign, CDP, or Node startup.  A live PID
+# few seconds and must not perform codesign, Inspector, or Node startup. A live PID
 # alone is not enough because a stale state file can outlive the watcher and
 # its PID may later be reused by an unrelated process.
 injector_identity_matches() {
@@ -160,11 +162,9 @@ if [ "$SESSION" = "applying" ] && [ "$OPERATION_STATUS" != "applying" ]; then
   if [ "$INJECTOR_ALIVE" = "true" ]; then SESSION="stale"; else SESSION="unknown"; fi
 fi
 
-if [ "$DEEP" = "true" ]; then
-  if /usr/bin/curl --noproxy '*' --silent --fail --max-time 1 "http://127.0.0.1:${PORT}/json/version" >/dev/null 2>&1; then
-    CDP_OK="true"
-  fi
-fi
+# A closed Inspector endpoint is the healthy steady state. --deep remains a
+# compatible no-op; live renderer checks belong to verify-dream-skin-macos.sh.
+: "$DEEP"
 
 label="Skin"
 case "$SESSION" in

@@ -3,7 +3,7 @@
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd -P)/common-macos.sh"
 
-PORT=9341
+PORT=9229
 CREATE_LAUNCHERS="true"
 LAUNCH_AFTER_INSTALL="true"
 IN_PLACE="false"
@@ -16,8 +16,8 @@ while [ "$#" -gt 0 ]; do
     *) fail "Unknown installer argument: $1" ;;
   esac
 done
-case "$PORT" in ''|*[!0-9]*) fail "Invalid port: $PORT" ;; esac
-[ "$PORT" -ge 1024 ] && [ "$PORT" -le 65535 ] || fail "Port must be between 1024 and 65535."
+# --port is retained for old launchers, but Node Inspector uses 9229.
+PORT="$INSPECTOR_PORT"
 
 deploy_project() {
   local temporary="$INSTALL_ROOT.installing.$$"
@@ -136,7 +136,7 @@ if [ "$CREATE_LAUNCHERS" = "true" ]; then
   verify_script="$(shell_quote "$SCRIPT_DIR/verify-dream-skin-macos.sh")"
   restore_script="$(shell_quote "$SCRIPT_DIR/restore-dream-skin-macos.sh")"
   screenshot="$(shell_quote "$HOME/Desktop/Codex Dream Skin Verification.png")"
-  write_launcher "$HOME/Desktop/Codex Dream Skin.command" "exec $start_script --port $PORT --prompt-restart"
+  write_launcher "$HOME/Desktop/Codex Dream Skin.command" "exec $start_script"
   write_launcher "$HOME/Desktop/Codex Dream Skin - Customize.command" "exec $customize_script"
   write_launcher "$HOME/Desktop/Codex Dream Skin - Verify.command" "$verify_script --screenshot $screenshot && /usr/bin/open $screenshot"
   write_launcher "$HOME/Desktop/Codex Dream Skin - Restore.command" "exec $restore_script --restore-base-theme --restart-codex"
@@ -148,5 +148,5 @@ printf 'Use the Desktop launchers to customize, start, verify, or restore the of
 printf 'Bundled presets are ready in your theme library — pick one from the menu bar (已保存的主题) or switch-theme.\n'
 
 if [ "$LAUNCH_AFTER_INSTALL" = "true" ]; then
-  "$SCRIPT_DIR/start-dream-skin-macos.sh" --port "$PORT" --prompt-restart
+  "$SCRIPT_DIR/start-dream-skin-macos.sh"
 fi

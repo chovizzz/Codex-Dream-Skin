@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     "scripts/doctor-macos.sh",
     "scripts/image-metadata.mjs",
     "scripts/injector.mjs",
+    "scripts/inspector-pulse.mjs",
     "scripts/install-dream-skin-macos.sh",
     "scripts/load-image-theme-macos.sh",
     "scripts/pause-dream-skin-macos.sh",
@@ -459,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.addButton(withTitle: "稍后")
         self.activateForUserInteraction()
         if alert.runModal() == .alertFirstButtonReturn,
-           let url = URL(string: "https://github.com/Fei-Away/Codex-Dream-Skin/releases/latest") {
+           let url = URL(string: "https://github.com/chovizzz/Codex-Dream-Skin/releases/latest") {
           NSWorkspace.shared.open(url)
         }
       } else {
