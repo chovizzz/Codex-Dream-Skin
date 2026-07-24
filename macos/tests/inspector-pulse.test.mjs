@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   INSPECTOR_CLOSE_EXPRESSION,
+  assertInspectorRuntimeSupport,
   assertInspectorPortOwnership,
   assertInspectorProcessIdentity,
   buildApplyMainExpression,
@@ -107,10 +108,28 @@ assert.throws(() => assertInspectorProcessIdentity(991, 992), /PID/);
 assert.doesNotThrow(() => assertInspectorProcessIdentity(992, 992));
 assert.match(INSPECTOR_CLOSE_EXPRESSION, /require\(["']inspector["']\)\.close/);
 assert.match(INSPECTOR_CLOSE_EXPRESSION, /process\._debugEnd/);
+assert.doesNotThrow(() => assertInspectorRuntimeSupport({
+  WebSocket: class {},
+  fetch() {},
+  AbortSignal: { timeout() {} },
+}, "v24.14.0"));
+assert.throws(
+  () => assertInspectorRuntimeSupport({
+    fetch() {},
+    AbortSignal: { timeout() {} },
+  }, "v20.11.1"),
+  /bundled Node\.js v20\.11\.1.*WebSocket.*22 or newer/,
+);
 
 const startSource = await fs.readFile(path.join(scriptsDir, "start-dream-skin-macos.sh"), "utf8");
 const commonSource = await fs.readFile(path.join(scriptsDir, "common-macos.sh"), "utf8");
+const switchSource = await fs.readFile(path.join(scriptsDir, "switch-theme-macos.sh"), "utf8");
 assert.doesNotMatch(startSource, /--remote-debugging-(?:address|port)/);
 assert.doesNotMatch(commonSource, /--remote-debugging-(?:address|port)/);
+assert.match(commonSource, /HOT_REAPPLY_ERROR/);
+assert.match(switchSource, /HOT_REAPPLY_ERROR/);
+assert.doesNotMatch(commonSource, /"\$PULSE" --apply[^\n]*[\s\S]{0,220}>\/dev\/null 2>&1/);
+assert.match(commonSource, /HOT_REAPPLY_ERROR=.*head -n 1/);
+assert.doesNotMatch(commonSource, /HOT_REAPPLY_ERROR=.*tail -n 1/);
 
 console.log("PASS: Node Inspector pulse transport is scoped, identity-checked, and short-lived.");

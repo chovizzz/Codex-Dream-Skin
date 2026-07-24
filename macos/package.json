@@ -8,6 +8,6 @@
     "doctor": "./scripts/doctor-macos.sh"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

@@ -27,6 +27,12 @@
   --ds-focus-x: var(--dream-skin-focus-x, var(--dream-art-focus-x, 50%));
   --ds-focus-y: var(--dream-skin-focus-y, var(--dream-art-focus-y, 50%));
   --ds-art-position: var(--dream-art-position, var(--dream-skin-art-position, var(--ds-focus-x) var(--ds-focus-y)));
+  --ds-home-art-position: var(--ds-art-position);
+  --ds-task-art-position: var(--ds-art-position);
+  --ds-sidebar-art-position: var(--ds-art-position);
+  --ds-home-art-size: cover;
+  --ds-task-art-size: cover;
+  --ds-sidebar-art-size: cover;
   --ds-safe-side: left;
   --ds-hero-scrim: linear-gradient(90deg,
     rgb(var(--ds-bg-rgb) / .90) 0%,
@@ -301,10 +307,10 @@ html[data-dream-skin="active"] main.main-surface:not(:has([role="main"]))::befor
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: var(--ds-task-fade), var(--ds-task-shade), var(--dream-skin-art);
+  background-image: var(--ds-task-fade), var(--ds-task-shade), var(--dream-skin-task-art, var(--dream-skin-art));
   background-repeat: no-repeat;
-  background-position: center, center, var(--ds-art-position);
-  background-size: 100% 100%, 100% 100%, cover;
+  background-position: center, center, var(--ds-task-art-position);
+  background-size: 100% 100%, 100% 100%, var(--ds-task-art-size);
   opacity: .78;
 }
 
@@ -314,8 +320,8 @@ html[data-dream-skin="active"][data-dream-shell="light"] main.main-surface:not(:
 
 html[data-dream-skin="active"]:is([data-dream-art-wide="true"], [data-dream-art-aspect="wide"], [data-dream-art-aspect="ultrawide"])
   main.main-surface:not(:has([role="main"]))::before {
-  background-position: center, center, var(--ds-art-position);
-  background-size: 100% 100%, 100% 100%, cover;
+  background-position: center, center, var(--ds-task-art-position);
+  background-size: 100% 100%, 100% 100%, var(--ds-task-art-size);
 }
 
 html[data-dream-skin="active"]:is([data-dream-task-mode="ambient"], [data-dream-art-task-mode="ambient"], [data-dream-task-mode="banner"], [data-dream-art-task-mode="banner"])
@@ -325,9 +331,9 @@ html[data-dream-skin="active"]:is([data-dream-task-mode="ambient"], [data-dream-
 }
 
 html[data-dream-skin="active"]:is([data-dream-task-mode="ambient"], [data-dream-art-task-mode="ambient"], [data-dream-task-mode="banner"], [data-dream-art-task-mode="banner"])[data-dream-art-wide="true"]:has(main.main-surface):not(:has(main.main-surface [role="main"])) body {
-  background-image: var(--dream-skin-art) !important;
-  background-position: var(--ds-art-position) !important;
-  background-size: cover !important;
+  background-image: var(--dream-skin-task-art, var(--dream-skin-art)) !important;
+  background-position: var(--ds-task-art-position) !important;
+  background-size: var(--ds-task-art-size) !important;
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
 }
@@ -404,16 +410,16 @@ html[data-dream-skin="active"]:is([data-dream-task-mode="banner"], [data-dream-a
   main.main-surface:not(:has([role="main"]))::before {
   inset: 0 0 auto;
   height: clamp(280px, 46vh, 520px);
-  background-position: center top, center top, var(--ds-art-position);
-  background-size: 100% 100%, 100% 100%, cover;
+  background-position: center top, center top, var(--ds-task-art-position);
+  background-size: 100% 100%, 100% 100%, var(--ds-task-art-size);
 }
 
 html[data-dream-skin="active"]:is([data-dream-task-mode="banner"], [data-dream-art-task-mode="banner"]):is([data-dream-art-wide="true"], [data-dream-art-aspect="wide"], [data-dream-art-aspect="ultrawide"])
   main.main-surface:not(:has([role="main"]))::before {
   inset: 0;
   height: auto;
-  background-position: center, center, var(--ds-art-position);
-  background-size: 100% 100%, 100% 100%, cover;
+  background-position: center, center, var(--ds-task-art-position);
+  background-size: 100% 100%, 100% 100%, var(--ds-task-art-size);
 }
 
 html[data-dream-skin="active"]:is([data-dream-task-mode="off"], [data-dream-art-task-mode="off"])
@@ -590,10 +596,10 @@ html[data-dream-skin="active"] [role="main"]:has([data-testid="home-icon"]) > di
   border: 1px solid rgb(var(--ds-accent-rgb) / .30) !important;
   border-radius: 22px !important;
   background-color: var(--ds-panel) !important;
-  background-image: var(--dream-skin-art) !important;
+  background-image: var(--dream-skin-home-art, var(--dream-skin-art)) !important;
   background-repeat: no-repeat !important;
-  background-position: var(--ds-art-position) !important;
-  background-size: cover !important;
+  background-position: var(--ds-home-art-position) !important;
+  background-size: var(--ds-home-art-size) !important;
   box-shadow: 0 16px 38px rgb(var(--ds-bg-rgb) / .30) !important;
 }
 
@@ -802,9 +808,9 @@ html[data-dream-skin="active"] .composer-surface-chrome::before { content: none 
 /* A wide image can carry the home screen too. The native hero remains live,
    but the artwork is painted once on the window instead of repeated in a card. */
 html[data-dream-skin="active"][data-dream-art-wide="true"]:has(main.main-surface [role="main"]) body {
-  background-image: var(--dream-skin-art) !important;
-  background-position: var(--ds-art-position) !important;
-  background-size: cover !important;
+  background-image: var(--dream-skin-home-art, var(--dream-skin-art)) !important;
+  background-position: var(--ds-home-art-position) !important;
+  background-size: var(--ds-home-art-size) !important;
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
 }
@@ -1075,6 +1081,15 @@ html[data-dream-skin="active"] button[class~="bg-token-foreground"] {
 
 html[data-dream-skin="active"] article,
 html[data-dream-skin="active"] [data-message-author-role] { border-radius: 16px; }
+
+html[data-dream-skin="active"][data-dream-multi-art="true"] aside.app-shell-left-panel {
+  background-image:
+    linear-gradient(rgb(var(--ds-panel-rgb) / .48), rgb(var(--ds-panel-rgb) / .64)),
+    var(--dream-skin-sidebar-art, var(--dream-skin-art)) !important;
+  background-position: center, var(--ds-sidebar-art-position) !important;
+  background-size: 100% 100%, var(--ds-sidebar-art-size) !important;
+  background-repeat: no-repeat !important;
+}
 
 @media (max-width: 1120px) {
   html[data-dream-skin="active"]

@@ -1,7 +1,7 @@
 ---
 name: codex-dream-skin-studio
 description: Install, customize, launch, verify, repair, update, or restore Codex Dream Skin Studio on macOS. Use when a user wants to turn a personal image into one continuous full-window Codex wallpaper with adaptive readability layers while preserving the native interface, or needs safe Node Inspector pulse troubleshooting and rollback.
-compatibility: macOS, official Codex Desktop app, signed bundled Node.js 20 or newer
+compatibility: macOS, official Codex Desktop app, signed bundled Node.js 22 or newer
 ---
 
 # Codex Dream Skin Studio

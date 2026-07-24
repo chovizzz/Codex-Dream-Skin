@@ -84,33 +84,49 @@ async function main() {
   if (theme?.schemaVersion !== 1 || typeof theme.image !== "string" || !theme.image) {
     throw new Error("Theme config has an unsupported schema or image field");
   }
-  if (path.basename(theme.image) !== theme.image) {
-    throw new Error("Theme image must stay inside its theme directory");
-  }
-  if (theme.image === "theme.json") {
-    throw new Error("Theme image must not replace theme.json");
-  }
-  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(theme.image)) {
-    throw new Error("Theme image contains control characters");
+  const imageNames = [];
+  for (const [field, value] of [
+    ["image", theme.image],
+    ["homeImage", theme.homeImage],
+    ["taskImage", theme.taskImage],
+    ["sidebarImage", theme.sidebarImage],
+  ]) {
+    if (value === undefined) continue;
+    if (typeof value !== "string" || !value || path.basename(value) !== value) {
+      throw new Error(`Theme ${field} must stay inside its theme directory`);
+    }
+    if (value === "theme.json") throw new Error(`Theme ${field} must not replace theme.json`);
+    if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(value)) {
+      throw new Error(`Theme ${field} contains control characters`);
+    }
+    if (!imageNames.includes(value)) imageNames.push(value);
   }
 
-  const imagePath = path.resolve(sourceRoot, theme.image);
-  assertContained(sourceRoot, imagePath, "Theme image");
-  const image = await readStableFile(imagePath, "Theme image", MAX_IMAGE_BYTES);
-  if (image.bytes.length < 1) throw new Error("Theme image is empty");
+  const images = [];
+  for (const imageName of imageNames) {
+    const imagePath = path.resolve(sourceRoot, imageName);
+    assertContained(sourceRoot, imagePath, `Theme image ${imageName}`);
+    const image = await readStableFile(imagePath, `Theme image ${imageName}`, MAX_IMAGE_BYTES);
+    if (image.bytes.length < 1) throw new Error(`Theme image ${imageName} is empty`);
+    images.push({ bytes: image.bytes, name: imageName });
+  }
 
   const stageRoot = await fs.realpath(stageDirArg);
   const stageStat = await fs.stat(stageRoot);
   if (!stageStat.isDirectory()) throw new Error("Theme stage must be a directory");
   assertContained(stageRoot, path.join(stageRoot, "theme.json"), "Staged theme config");
-  assertContained(stageRoot, path.join(stageRoot, theme.image), "Staged theme image");
+  for (const image of images) {
+    assertContained(stageRoot, path.join(stageRoot, image.name), "Staged theme image");
+  }
 
   // Write both files from the already-open, stable descriptors. The caller
   // publishes the image first and theme.json last, so the watcher only ever
   // observes a complete pair; subsequent source edits cannot race the copy.
-  await writeExclusive(path.join(stageRoot, theme.image), image.bytes);
+  for (const image of images) {
+    await writeExclusive(path.join(stageRoot, image.name), image.bytes);
+  }
   await writeExclusive(path.join(stageRoot, "theme.json"), config.bytes);
-  process.stdout.write(theme.image);
+  process.stdout.write(imageNames.join("\n"));
 }
 
 await main();

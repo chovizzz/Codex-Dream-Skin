@@ -15,7 +15,7 @@ official `.app`, `app.asar`, or code signature.
 
 - macOS 13 Ventura or newer (the native DMG app declares macOS 13 as its minimum)
 - Official Codex Desktop installed and launched at least once (`~/.codex/config.toml` exists)
-- No global Node.js install required (uses Codex’s signed bundled Node after validation)
+- No global Node.js install required (uses Codex’s signed bundled Node 22+ after signature and runtime-capability validation)
 
 ## Release install (recommended)
 
@@ -87,8 +87,8 @@ CSS/images.
 6. Close Node Inspector immediately after every apply, verify, or remove pulse.
    A lightweight PID watcher notices future normal Codex launches and pulses
    once for each new main process; it never holds the Inspector port open.
-7. Resolve the selected theme and image to real paths, then enforce 16 MB,
-   `16384px`-per-side, and 50-megapixel limits before injection.
+7. Resolve every selected theme image to a real path, then enforce the 16 MB,
+   `16384px`-per-side, and 50-megapixel limits on each before injection.
 8. Pause/Restore stops the PID watcher only when PID, executable, script path, and
    start time match the recorded job; a stop failure preserves state and aborts.
 9. Config backup/restore requires Codex to be closed, strict UTF-8, an operation
@@ -178,6 +178,33 @@ fields. Explicit art metadata (`focusX`, `focusY`, `safeArea`, `taskMode`) has
 the same priority over automatic inference. The home route remains expressive;
 task routes keep native content, cards, composer, and code readable above the
 image layer.
+
+### Multiple images by surface
+
+One-image themes remain unchanged. A theme pack can optionally provide separate
+artwork for the home hero, task routes, and sidebar; any omitted field falls
+back to the required `image` value:
+
+```json
+{
+  "schemaVersion": 1,
+  "image": "home.jpg",
+  "homeImage": "home.jpg",
+  "taskImage": "task.webp",
+  "sidebarImage": "sidebar.jpg",
+  "art": {
+    "home": { "focusX": 0.62, "focusY": 0.48, "fit": "cover" },
+    "task": { "focusX": 0.5, "focusY": 0.42, "fit": "contain" },
+    "sidebar": { "focusX": 0.5, "focusY": 0.5, "fit": "cover" }
+  }
+}
+```
+
+Use landscape 3:2–16:9 art for home, portrait/square art for a contained task
+layer, and portrait 2:3–3:4 art for the sidebar. Surface focus coordinates use
+the same normalized `0..1` convention as the base image. `fit` accepts `auto`,
+`cover`, or `contain`; in `auto`, portrait and square task images use `contain`
+while other surfaces use `cover`.
 
 CLI example:
 

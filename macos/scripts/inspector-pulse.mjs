@@ -18,6 +18,19 @@ const INSPECTOR_PORT = 9229;
 const MAIN_RUNTIME_KEY = "__CODEX_DREAM_SKIN_MAIN_RUNTIME__";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
+export function assertInspectorRuntimeSupport(runtime = globalThis, version = process.version) {
+  const missing = [];
+  if (typeof runtime.WebSocket !== "function") missing.push("WebSocket");
+  if (typeof runtime.fetch !== "function") missing.push("fetch");
+  if (typeof runtime.AbortSignal?.timeout !== "function") missing.push("AbortSignal.timeout");
+  if (missing.length) {
+    throw new Error(
+      `ChatGPT bundled Node.js ${version} lacks ${missing.join(", ")}; `
+      + "update the official ChatGPT app to a build with bundled Node.js 22 or newer.",
+    );
+  }
+}
+
 export const INSPECTOR_CLOSE_EXPRESSION = `setTimeout(() => {
   try { require("inspector").close(); } catch {}
   try { if (typeof process._debugEnd === "function") process._debugEnd(); } catch {}
@@ -315,6 +328,7 @@ export async function pulse(expression, {
   timeoutMs = 10000,
   awaitPromise = true,
 } = {}) {
+  assertInspectorRuntimeSupport();
   if (!Number.isInteger(pid) || pid < 2) throw new Error("A verified Codex PID is required");
   if (!codexExe) throw new Error("The verified Codex executable path is required");
   let lastError;

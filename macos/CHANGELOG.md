@@ -10,6 +10,8 @@
 - 常驻进程改为仅轮询新的 Codex PID；发现正常启动的新实例时短时 pulse 一次，不再持有调试端口。
 - 暂停、恢复、主题切换、图片导入、doctor 与截图验证全部切换到同一 pulse transport，保留签名、主题文件、PID/启动时间和原子状态保护。
 - Inspector transport 基于 `okkskin` 0.2.2 的 MIT 实现改造，归属与完整许可文本已写入 `NOTICE.md`。
+- Inspector pulse 明确要求 Codex 内置 Node.js 22+ 以及 `WebSocket`、`fetch`、`AbortSignal.timeout`；失败提示现在包含实际版本或缺失能力，不再只显示笼统的 inject failed。
+- 主题 schema 兼容新增 `homeImage`、`taskImage`、`sidebarImage` 与各自的 focus/fit 配置；单图主题原样回退，多图主题按首页、任务页和侧栏分别构图并原子暂存全部图片。
 
 ## 1.3.3 — 2026-07-23
 

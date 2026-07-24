@@ -145,6 +145,7 @@ fi
 "$NODE" "$ROOT/tests/image-metadata.test.mjs"
 "$NODE" "$ROOT/tests/injector-bootstrap.test.mjs"
 "$NODE" "$ROOT/tests/inspector-pulse.test.mjs"
+"$NODE" "$ROOT/tests/multi-image-theme.test.mjs"
 "$NODE" "$ROOT/tests/renderer-inject.test.mjs"
 "$NODE" "$ROOT/tests/theme-stage.test.mjs"
 
@@ -247,9 +248,9 @@ UNSAFE_MENU_OUTPUT="$(
   /usr/bin/env CODEX_DREAM_SKIN_ENGINE="$UNSAFE_ENGINE" \
     "$ROOT/menubar/codex_dream_skin.10s.sh"
 )"
-/usr/bin/printf '%s\n' "$UNSAFE_MENU_OUTPUT" | /usr/bin/grep -F -q \
-  'Engine path contains unsupported SwiftBar characters'
-if /usr/bin/printf '%s\n' "$UNSAFE_MENU_OUTPUT" | /usr/bin/grep -F -q 'bash='; then
+/usr/bin/grep -F -q 'Engine path contains unsupported SwiftBar characters' \
+  <<< "$UNSAFE_MENU_OUTPUT"
+if /usr/bin/grep -F -q 'bash=' <<< "$UNSAFE_MENU_OUTPUT"; then
   printf 'SwiftBar emitted command attributes for an unsafe engine path.\n' >&2
   exit 1
 fi
@@ -264,8 +265,8 @@ MENU_IMAGE_OUTPUT="$(
   /usr/bin/env HOME="$MENU_HOME" CODEX_DREAM_SKIN_ENGINE="$ROOT" \
     "$ROOT/menubar/codex_dream_skin.10s.sh"
 )"
-/usr/bin/printf '%s\n' "$MENU_IMAGE_OUTPUT" | /usr/bin/grep -F -q 'safe-image.png'
-if /usr/bin/printf '%s\n' "$MENU_IMAGE_OUTPUT" | /usr/bin/grep -F -q 'bad'; then
+/usr/bin/grep -F -q 'safe-image.png' <<< "$MENU_IMAGE_OUTPUT"
+if /usr/bin/grep -F -q 'bad' <<< "$MENU_IMAGE_OUTPUT"; then
   printf 'SwiftBar emitted a control-character image filename.\n' >&2
   exit 1
 fi
@@ -701,8 +702,7 @@ for invalid_case in appearance safe-area task-mode focus-x focus-y name-control;
     focus-y) EXPECTED_INVALID_FIELD='art.focusY' ;;
     name-control) EXPECTED_INVALID_FIELD='name' ;;
   esac
-  /usr/bin/printf '%s\n' "$INVALID_OUTPUT" | /usr/bin/grep -F -q \
-    "invalid $EXPECTED_INVALID_FIELD field"
+  /usr/bin/grep -F -q "invalid $EXPECTED_INVALID_FIELD field" <<< "$INVALID_OUTPUT"
 done
 
 /bin/mkdir -p "$TMP/missing-theme"
@@ -712,8 +712,9 @@ if MISSING_THEME_OUTPUT="$(
   printf 'Explicit theme directory without theme.json unexpectedly passed.\n' >&2
   exit 1
 fi
-/usr/bin/printf '%s\n' "$MISSING_THEME_OUTPUT" | /usr/bin/grep -F -q \
-  "Explicit theme directory is missing theme.json: $TMP/missing-theme/theme.json"
+/usr/bin/grep -F -q \
+  "Explicit theme directory is missing theme.json: $TMP/missing-theme/theme.json" \
+  <<< "$MISSING_THEME_OUTPUT"
 
 # A theme config or image symlink may resolve only inside its own theme root.
 /bin/mkdir -p "$TMP/symlink-outside" "$TMP/symlink-image-theme" "$TMP/symlink-config-theme"
@@ -728,8 +729,8 @@ if SYMLINK_IMAGE_OUTPUT="$(
   printf 'Injector unexpectedly accepted a theme image symlink escaping its theme directory.\n' >&2
   exit 1
 fi
-/usr/bin/printf '%s\n' "$SYMLINK_IMAGE_OUTPUT" | /usr/bin/grep -F -q \
-  'Theme image must stay inside its theme directory'
+/usr/bin/grep -F -q 'Theme image must stay inside its theme directory' \
+  <<< "$SYMLINK_IMAGE_OUTPUT"
 /usr/bin/printf '%s\n' \
   '{"schemaVersion":1,"id":"symlink-config","name":"Symlink config","image":"background.png"}' \
   > "$TMP/symlink-outside/theme.json"
@@ -740,8 +741,8 @@ if SYMLINK_CONFIG_OUTPUT="$(
   printf 'Injector unexpectedly accepted a theme config symlink escaping its theme directory.\n' >&2
   exit 1
 fi
-/usr/bin/printf '%s\n' "$SYMLINK_CONFIG_OUTPUT" | /usr/bin/grep -F -q \
-  'Theme config must stay inside its theme directory'
+/usr/bin/grep -F -q 'Theme config must stay inside its theme directory' \
+  <<< "$SYMLINK_CONFIG_OUTPUT"
 
 # Exercise the dimension limit through the complete payload loader, not only
 # through the standalone metadata parser.
@@ -768,8 +769,8 @@ if OVERSIZED_DIMENSION_OUTPUT="$(
   printf 'Injector unexpectedly accepted an image over the dimension limit.\n' >&2
   exit 1
 fi
-/usr/bin/printf '%s\n' "$OVERSIZED_DIMENSION_OUTPUT" | /usr/bin/grep -F -q \
-  'invalid or exceeds the 16384px / 50MP safety limit'
+/usr/bin/grep -F -q 'invalid or exceeds the 16384px / 50MP safety limit' \
+  <<< "$OVERSIZED_DIMENSION_OUTPUT"
 
 # reset-demo must reject realpath aliases back into its own project, including
 # case aliases on the default case-insensitive macOS filesystem.

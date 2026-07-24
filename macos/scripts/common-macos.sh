@@ -36,6 +36,7 @@ DREAM_SKIN_VALIDATED_RUNTIME_PID=""
 DREAM_SKIN_VALIDATED_RUNTIME_BUNDLE=""
 DREAM_SKIN_VALIDATED_RUNTIME_EXE=""
 DREAM_SKIN_VALIDATED_RUNTIME_NODE=""
+HOT_REAPPLY_ERROR=""
 
 fail() {
   local message="$*"
@@ -304,7 +305,7 @@ require_signed_node_runtime() {
   node_major="${NODE_VERSION#v}"
   node_major="${node_major%%.*}"
   case "$node_major" in ''|*[!0-9]*) fail "Could not parse bundled Node.js version: $NODE_VERSION" ;; esac
-  [ "$node_major" -ge 20 ] || fail "ChatGPT bundled Node.js $NODE_VERSION is too old; version 20 or newer is required."
+  [ "$node_major" -ge 22 ] || fail "ChatGPT bundled Node.js $NODE_VERSION is too old for Inspector pulses; update ChatGPT to get Node.js 22 or newer."
 
   NODE="$RUNTIME_NODE"
   export NODE RUNTIME_NODE NODE_VERSION CODEX_TEAM_ID NODE_TEAM_ID
@@ -704,7 +705,9 @@ hot_reapply_theme() {
   local saved_port=""
   local started_at=""
   local codex_pid=""
+  local pulse_error=""
 
+  HOT_REAPPLY_ERROR=""
   ensure_node_runtime || return 1
   port="$INSPECTOR_PORT"
   codex_pid="$(codex_main_pids 2>/dev/null | /usr/bin/head -n 1)"
@@ -724,11 +727,17 @@ hot_reapply_theme() {
       inj_pid=""
     fi
   fi
+  pulse_error="$STATE_ROOT/.pulse-error.$$.log"
+  /bin/rm -f "$pulse_error"
   if ! "$NODE" "$PULSE" --apply --pid "$codex_pid" --port "$port" \
     --codex-exe "$CODEX_EXE" --theme-dir "$THEME_DIR" \
-    --timeout-ms "$timeout_ms" >/dev/null 2>&1; then
+    --timeout-ms "$timeout_ms" >/dev/null 2>"$pulse_error"; then
+    HOT_REAPPLY_ERROR="$(/usr/bin/head -n 1 "$pulse_error" 2>/dev/null || true)"
+    [ -s "$pulse_error" ] && /bin/cat "$pulse_error" >> "$START_ERROR_LOG" 2>/dev/null || true
+    /bin/rm -f "$pulse_error"
     return 1
   fi
+  /bin/rm -f "$pulse_error"
 
   if [ -n "$inj_pid" ] && /bin/kill -0 "$inj_pid" 2>/dev/null; then
     mark_state_active || return 1

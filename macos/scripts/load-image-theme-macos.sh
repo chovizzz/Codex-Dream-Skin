@@ -150,5 +150,5 @@ if "$SCRIPT_DIR/start-dream-skin-macos.sh"; then
   exit 0
 fi
 
-alert_user "Image saved but inject failed. Click Apply Skin."
+alert_user "Image saved, but apply failed. ${HOT_REAPPLY_ERROR:-Open Diagnostics for the exact runtime error.}"
 exit 1

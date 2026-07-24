@@ -66,15 +66,21 @@ stage="$(/usr/bin/mktemp -d "$STATE_ROOT/.theme-switch.XXXXXX")"
 # descriptors. This closes the validation/copy TOCTOU window: after this
 # command returns, edits or symlink swaps in themes/<id> cannot mix the pair
 # that will be published to the live theme directory.
-THEME_IMAGE="$("$NODE" "$SCRIPT_DIR/stage-theme.mjs" "$SRC" "$stage")" \
+THEME_IMAGES="$("$NODE" "$SCRIPT_DIR/stage-theme.mjs" "$SRC" "$stage")" \
   || fail "Theme pack changed or failed staging: $THEME_ID"
 # Validate the exact staged pair, not the mutable library directory. The
 # injector performs the full schema, path, dimensions, and image checks.
 "$NODE" "$INJECTOR" --check-payload --theme-dir "$stage" >/dev/null \
   || fail "Theme pack failed validation: $THEME_ID"
-THEME_BYTES="$(/usr/bin/stat -f '%z' "$stage/$THEME_IMAGE")"
-[ "$THEME_BYTES" -gt 0 ] && [ "$THEME_BYTES" -le 16777216 ] \
-  || fail "Theme image must be non-empty and no larger than 16 MB."
+THEME_BYTES=0
+while IFS= read -r theme_image; do
+  [ -n "$theme_image" ] || continue
+  image_bytes="$(/usr/bin/stat -f '%z' "$stage/$theme_image")"
+  [ "$image_bytes" -gt 0 ] && [ "$image_bytes" -le 16777216 ] \
+    || fail "Each theme image must be non-empty and no larger than 16 MB."
+  THEME_BYTES=$((THEME_BYTES + image_bytes))
+done <<< "$THEME_IMAGES"
+[ "$THEME_BYTES" -gt 0 ] || fail "Theme pack did not stage any images."
 /bin/chmod 600 "$stage/"*
 for entry in "$stage/"*; do
   [ -f "$entry" ] || continue
@@ -84,8 +90,16 @@ done
 # theme.json is the commit marker: the watcher never observes a config that
 # references a partially copied image.
 /bin/mv -f "$stage/theme.json" "$THEME_DIR/theme.json"
-/usr/bin/find "$THEME_DIR" -maxdepth 1 -type f \
-  ! -name 'theme.json' ! -name "$THEME_IMAGE" -delete
+theme_image_set=$'\n'"$THEME_IMAGES"$'\n'
+for entry in "$THEME_DIR"/*; do
+  [ -f "$entry" ] || continue
+  entry_name="$(/usr/bin/basename "$entry")"
+  [ "$entry_name" = "theme.json" ] && continue
+  case "$theme_image_set" in
+    *$'\n'"$entry_name"$'\n'*) ;;
+    *) /bin/rm -f "$entry" ;;
+  esac
+done
 /bin/rm -rf "$stage"
 stage=""
 
@@ -110,5 +124,5 @@ if "$SCRIPT_DIR/start-dream-skin-macos.sh"; then
   exit 0
 fi
 
-alert_user "Theme switched but inject failed. Click Apply Skin."
+alert_user "Theme saved, but apply failed. ${HOT_REAPPLY_ERROR:-Open Diagnostics for the exact runtime error.}"
 exit 1

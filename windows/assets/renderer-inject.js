@@ -10,7 +10,7 @@
     "data-dream-skin", SHELL_ATTR,
     "data-dream-art-wide", "data-dream-art-safe", "data-dream-task-mode",
     "data-dream-art-safe-area", "data-dream-art-task-mode", "data-dream-art-aspect",
-    "data-dream-art-ready",
+    "data-dream-art-ready", "data-dream-multi-art",
   ];
   const VERSION = __DREAM_SKIN_VERSION_JSON__;
   const STYLE_REVISION = __DREAM_SKIN_STYLE_REVISION_JSON__;
@@ -19,6 +19,8 @@
   const ART = THEME.art && typeof THEME.art === "object" ? THEME.art : {};
   const ART_METADATA = THEME.artMetadata && typeof THEME.artMetadata === "object"
     ? THEME.artMetadata : null;
+  const ART_METADATA_BY_SURFACE = THEME.artMetadataBySurface
+    && typeof THEME.artMetadataBySurface === "object" ? THEME.artMetadataBySurface : {};
   const ANALYSIS_CACHE_KEY = "__CODEX_DREAM_SKIN_ANALYSIS_CACHE__";
   const THEME_VARIABLES = [
     "--ds-bg", "--ds-panel", "--ds-panel-2", "--ds-green", "--ds-lime",
@@ -31,6 +33,9 @@
     "--dream-skin-name", "--dream-skin-tagline", "--dream-skin-project-prefix",
     "--dream-skin-project-label", "--dream-skin-brand-subtitle", "--dream-skin-status",
     "--dream-skin-quote", "--dream-skin-art",
+    "--dream-skin-home-art", "--dream-skin-task-art", "--dream-skin-sidebar-art",
+    "--ds-home-art-position", "--ds-task-art-position", "--ds-sidebar-art-position",
+    "--ds-home-art-size", "--ds-task-art-size", "--ds-sidebar-art-size",
   ];
   const selectorByKey = new Map(SELECTOR_CONTRACT.selectors.map((entry) => [entry.key, entry]));
   const stableTestidSelector = (testid) => SELECTOR_CONTRACT.stableTestids?.includes(testid)
@@ -72,14 +77,28 @@
   const existingStyleRegistry = window[STYLE_REGISTRY_KEY];
   const styleRegistry = existingStyleRegistry instanceof Set ? existingStyleRegistry : new Set();
   window[STYLE_REGISTRY_KEY] = styleRegistry;
-  const artUrl = (() => {
-    const comma = artDataUrl.indexOf(",");
-    const mime = /^data:([^;,]+)/.exec(artDataUrl)?.[1] || "image/png";
-    const binary = atob(artDataUrl.slice(comma + 1));
+  const createArtUrl = (dataUrl) => {
+    const comma = dataUrl.indexOf(",");
+    const mime = /^data:([^;,]+)/.exec(dataUrl)?.[1] || "image/png";
+    const binary = atob(dataUrl.slice(comma + 1));
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     return URL.createObjectURL(new Blob([bytes], { type: mime }));
-  })();
+  };
+  const artDataUrls = typeof artDataUrl === "string"
+    ? { base: artDataUrl, home: artDataUrl, task: artDataUrl, sidebar: artDataUrl }
+    : artDataUrl && typeof artDataUrl === "object" ? artDataUrl : {};
+  const fallbackArtDataUrl = artDataUrls.base || artDataUrls.home || artDataUrls.task || artDataUrls.sidebar;
+  const objectUrlByData = new Map();
+  const artUrls = {};
+  for (const surface of ["base", "home", "task", "sidebar"]) {
+    const dataUrl = artDataUrls[surface] || fallbackArtDataUrl;
+    if (typeof dataUrl !== "string" || !dataUrl.includes(",")) {
+      throw new Error(`Dream Skin ${surface} artwork is missing or invalid`);
+    }
+    if (!objectUrlByData.has(dataUrl)) objectUrlByData.set(dataUrl, createArtUrl(dataUrl));
+    artUrls[surface] = objectUrlByData.get(dataUrl);
+  }
 
   const cssString = (value) => JSON.stringify(String(value ?? ""));
 
@@ -300,6 +319,21 @@
     setStyleProperty(root, "--dream-skin-focus-x", focusXValue);
     setStyleProperty(root, "--dream-skin-focus-y", focusYValue);
     setStyleProperty(root, "--dream-skin-art-position", `${focusXValue} ${focusYValue}`);
+    setAttribute(root, "data-dream-multi-art", THEME.multiImage ? "true" : "false");
+    for (const surface of ["home", "task", "sidebar"]) {
+      const surfaceConfig = ART[surface] && typeof ART[surface] === "object" ? ART[surface] : {};
+      const surfaceMetadata = ART_METADATA_BY_SURFACE[surface] || profile;
+      const surfaceFocusX = typeof surfaceConfig.focusX === "number" ? surfaceConfig.focusX
+        : surfaceMetadata?.focusX ?? focusX;
+      const surfaceFocusY = typeof surfaceConfig.focusY === "number" ? surfaceConfig.focusY
+        : surfaceMetadata?.focusY ?? focusY;
+      const inferredFit = surface === "task" && ["portrait", "square"].includes(surfaceMetadata?.aspect)
+        ? "contain" : "cover";
+      const fit = ["cover", "contain"].includes(surfaceConfig.fit) ? surfaceConfig.fit : inferredFit;
+      setStyleProperty(root, `--ds-${surface}-art-position`,
+        `${(clamp(surfaceFocusX, 0, 1) * 100).toFixed(2)}% ${(clamp(surfaceFocusY, 0, 1) * 100).toFixed(2)}%`);
+      setStyleProperty(root, `--ds-${surface}-art-size`, fit);
+    }
   };
 
   const analyzeArt = () => new Promise((resolve) => {
@@ -444,7 +478,7 @@
         finish(null);
       }
     };
-    image.src = artUrl;
+    image.src = artUrls.base;
   });
 
   const installStyle = () => {
@@ -499,7 +533,10 @@
     const shell = resolvedShell();
     setAttribute(root, "data-dream-skin", "active");
     setAttribute(root, SHELL_ATTR, shell);
-    setStyleProperty(root, "--dream-skin-art", `url("${artUrl}")`);
+    setStyleProperty(root, "--dream-skin-art", `url("${artUrls.base}")`);
+    setStyleProperty(root, "--dream-skin-home-art", `url("${artUrls.home}")`);
+    setStyleProperty(root, "--dream-skin-task-art", `url("${artUrls.task}")`);
+    setStyleProperty(root, "--dream-skin-sidebar-art", `url("${artUrls.sidebar}")`);
     applyTheme(root, shell);
     applyArtMetadata(root);
     return shell;
@@ -603,7 +640,7 @@
     styleNode?.remove();
     if (document.getElementById(STYLE_ID) === styleNode) document.getElementById(STYLE_ID)?.remove();
     if (styleRegistry.size === 0) delete window[STYLE_REGISTRY_KEY];
-    if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
+    for (const url of new Set(Object.values(state?.artUrls || {}))) URL.revokeObjectURL(url);
     delete window[STATE_KEY];
     return true;
   };
@@ -651,7 +688,7 @@
     mediaHandler,
     navigation: navigationApi,
     navigationHandler,
-    artUrl,
+    artUrls,
     installToken,
     styleMode,
     styleNode,
