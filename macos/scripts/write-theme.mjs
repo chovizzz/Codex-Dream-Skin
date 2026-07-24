@@ -77,6 +77,7 @@ const custom = {
   projectLabel: "◉  选择项目",
   statusText: "DREAM SKIN ONLINE",
   quote: quote || "MAKE SOMETHING WONDERFUL",
+  shellMode: "auto",
   image,
   colors: {
     background: "#071116",

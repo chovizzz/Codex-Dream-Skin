@@ -43,6 +43,41 @@ ensure_state_root() {
   /bin/chmod 700 "$STATE_ROOT"
 }
 
+ensure_active_theme() {
+  local bundled_theme="$PROJECT_ROOT/assets/theme.json"
+  local image_names=""
+  local image_name=""
+  local temporary_theme="$THEME_DIR/.theme.json.$$"
+  local temporary_image=""
+
+  [ -f "$THEME_DIR/theme.json" ] && return 0
+  [ -f "$bundled_theme" ] || fail "Bundled theme is missing: $bundled_theme"
+  [ -x "${NODE:-}" ] || fail "Node.js is required to initialize the bundled theme."
+
+  image_names="$("$NODE" -e '
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const theme = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const names = [...new Set([theme.image, theme.homeImage, theme.taskImage, theme.sidebarImage].filter(Boolean))];
+    if (!names.length || names.some((name) => typeof name !== "string" || path.basename(name) !== name)) process.exit(1);
+    process.stdout.write(names.join("\n"));
+  ' "$bundled_theme")" || fail "Bundled theme has an invalid image field."
+
+  /bin/mkdir -p "$THEME_DIR"
+  /bin/chmod 700 "$THEME_DIR"
+  while IFS= read -r image_name; do
+    [ -n "$image_name" ] || continue
+    [ -f "$PROJECT_ROOT/assets/$image_name" ] || fail "Bundled theme image is missing: $image_name"
+    temporary_image="$THEME_DIR/.${image_name}.$$"
+    /bin/cp "$PROJECT_ROOT/assets/$image_name" "$temporary_image"
+    /bin/chmod 600 "$temporary_image"
+    /bin/mv -f "$temporary_image" "$THEME_DIR/$image_name"
+  done <<< "$image_names"
+  /bin/cp "$bundled_theme" "$temporary_theme"
+  /bin/chmod 600 "$temporary_theme"
+  /bin/mv -f "$temporary_theme" "$THEME_DIR/theme.json"
+}
+
 discover_codex_app() {
   local candidate=""
   local identifier=""

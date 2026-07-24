@@ -1,4 +1,4 @@
-((cssText, artDataUrl, themeConfig) => {
+((cssText, artDataUrls, themeConfig) => {
   const STATE_KEY = "__CODEX_DREAM_SKIN_STATE__";
   const DISABLED_KEY = "__CODEX_DREAM_SKIN_DISABLED__";
   const STYLE_ID = "codex-dream-skin-style";
@@ -22,18 +22,243 @@
   if (previous?.mediaHandler && previous?.mediaQuery) {
     try { previous.mediaQuery.removeEventListener("change", previous.mediaHandler); } catch {}
   }
+  if (previous?.restoreContrast) previous.restoreContrast();
+  for (const artUrl of Object.values(previous?.artUrls || {})) URL.revokeObjectURL(artUrl);
   if (previous?.artUrl) URL.revokeObjectURL(previous.artUrl);
 
-  const artUrl = (() => {
+  const createArtUrl = (artDataUrl) => {
     const comma = artDataUrl.indexOf(",");
     const mime = /^data:([^;,]+)/.exec(artDataUrl)?.[1] || "image/png";
     const binary = atob(artDataUrl.slice(comma + 1));
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     return URL.createObjectURL(new Blob([bytes], { type: mime }));
-  })();
+  };
+  const artUrls = {
+    home: createArtUrl(artDataUrls.home),
+    task: createArtUrl(artDataUrls.task || artDataUrls.home),
+    sidebar: createArtUrl(artDataUrls.sidebar || artDataUrls.home),
+  };
 
   const cssString = (value) => JSON.stringify(String(value ?? ""));
+  const contrastOriginals = new Map();
+
+  const forceContrast = (node, property, value) => {
+    if (!(node instanceof HTMLElement || node instanceof SVGElement)) return;
+    let original = contrastOriginals.get(node);
+    if (!original) {
+      original = new Map();
+      contrastOriginals.set(node, original);
+    }
+    if (!original.has(property)) {
+      original.set(property, {
+        value: node.style.getPropertyValue(property),
+        priority: node.style.getPropertyPriority(property),
+      });
+    }
+    node.style.setProperty(property, value, "important");
+  };
+
+  const restoreContrast = () => {
+    for (const [node, properties] of contrastOriginals) {
+      for (const [property, original] of properties) {
+        if (original.value) node.style.setProperty(property, original.value, original.priority);
+        else node.style.removeProperty(property);
+      }
+    }
+    contrastOriginals.clear();
+  };
+
+  const applyContrastFixes = () => {
+    const lightShell = document.documentElement.getAttribute(SHELL_ATTR) === "light";
+    if (lightShell) {
+      document.querySelectorAll("main.main-surface > header.app-header-tint button").forEach((node) => {
+        const isAccent = node.classList.contains("bg-token-foreground");
+        forceContrast(node, "color", isAccent ? "#071116" : (node.getAttribute("aria-pressed") === "true" ? "#1f2f37" : "#4f6f80"));
+        forceContrast(node, "opacity", "1");
+        node.querySelectorAll("svg").forEach((svg) => forceContrast(svg, "color", isAccent ? "#071116" : "#4f6f80"));
+      });
+    }
+
+    const lightComposer = lightShell && document.querySelector(".composer-surface-chrome");
+    if (lightComposer) {
+      forceContrast(lightComposer, "color", "#1f1a1b");
+      forceContrast(lightComposer, "background", "rgba(255, 255, 255, .96)");
+      lightComposer.querySelectorAll(".ProseMirror, [contenteditable=\"true\"], .placeholder").forEach((node) => {
+        forceContrast(node, "color", "#3f3439");
+        forceContrast(node, "font-weight", "500");
+        forceContrast(node, "opacity", "1");
+      });
+      lightComposer.querySelectorAll("button").forEach((node) => {
+        const permission = node.getAttribute("data-composer-navigation-target") === "permissions";
+        const accent = node.classList.contains("bg-token-foreground");
+        forceContrast(node, "color", accent ? "#071116" : permission ? "#a43f00" : "#425662");
+        forceContrast(node, "opacity", "1");
+        node.querySelectorAll("span, svg").forEach((child) => {
+          forceContrast(child, "color", accent ? "#071116" : permission ? "#a43f00" : "#425662");
+          forceContrast(child, "opacity", "1");
+        });
+      });
+    }
+
+    const darkComposer = !lightShell && document.querySelector(".composer-surface-chrome");
+    if (darkComposer) {
+      forceContrast(darkComposer, "color", "#f7fafc");
+      forceContrast(darkComposer, "background", "linear-gradient(145deg, rgba(8, 27, 42, .96), rgba(7, 21, 34, .94))");
+      forceContrast(darkComposer, "border", "1px solid rgba(169, 221, 244, .34)");
+      darkComposer.querySelectorAll(".ProseMirror, [contenteditable=\"true\"]").forEach((node) => {
+        forceContrast(node, "color", "#f7fafc");
+        forceContrast(node, "caret-color", "#ff4351");
+        forceContrast(node, "opacity", "1");
+      });
+      darkComposer.querySelectorAll(".placeholder").forEach((node) => {
+        forceContrast(node, "color", "#b8cedb");
+        forceContrast(node, "font-weight", "500");
+        forceContrast(node, "opacity", "1");
+      });
+      darkComposer.querySelectorAll("button").forEach((node) => {
+        const permission = node.getAttribute("data-composer-navigation-target") === "permissions";
+        const accent = node.classList.contains("bg-token-foreground");
+        forceContrast(node, "color", accent ? "#071116" : permission ? "#ffb074" : "#d6e9f3");
+        forceContrast(node, "opacity", "1");
+        node.querySelectorAll("span, svg").forEach((child) => {
+          forceContrast(child, "color", accent ? "#071116" : permission ? "#ffb074" : "#d6e9f3");
+          forceContrast(child, "opacity", "1");
+        });
+      });
+    }
+
+    const pluginSearch = document.querySelector('input[placeholder="Search plugins"]');
+    if (pluginSearch) {
+      const pluginShell = pluginSearch.parentElement;
+      const pluginRow = pluginShell?.parentElement;
+      const pluginSticky = pluginRow?.parentElement;
+      forceContrast(pluginSearch, "color", "#f7fafc");
+      forceContrast(pluginSearch, "caret-color", "#ff4351");
+      if (pluginShell) {
+        forceContrast(pluginShell, "background", "rgba(8, 27, 42, .88)");
+        forceContrast(pluginShell, "border", "1px solid rgba(169, 221, 244, .34)");
+        forceContrast(pluginShell, "color", "#b8cedb");
+      }
+      if (pluginSticky) {
+        forceContrast(pluginSticky, "background", "linear-gradient(180deg, rgba(7, 21, 34, .98), rgba(7, 21, 34, .86))");
+        forceContrast(pluginSticky, "border-bottom", "1px solid rgba(169, 221, 244, .18)");
+      }
+      document.querySelectorAll('main.main-surface section:has(.group\\/plugin-row) .line-clamp-1').forEach((node) => {
+        forceContrast(node, "color", "#b8cedb");
+        forceContrast(node, "opacity", "1");
+      });
+      document.querySelectorAll('main.main-surface:has(input[placeholder="Search plugins"]) .text-token-foreground').forEach((node) => {
+        forceContrast(node, "color", "#f7fafc");
+        forceContrast(node, "opacity", "1");
+      });
+    }
+
+    document.querySelectorAll('aside.app-shell-left-panel button[class*="!opacity-75"]').forEach((node) => {
+      forceContrast(node, "color", "#f7fafc");
+      forceContrast(node, "opacity", "1");
+    });
+
+    document.querySelectorAll('[class*="group/activity-header"]').forEach((header) => {
+      forceContrast(header, "color", "#b8cedb");
+      header.querySelectorAll("*").forEach((node) => {
+        forceContrast(node, "color", "#b8cedb");
+        forceContrast(node, "opacity", "1");
+      });
+    });
+
+    document.querySelectorAll('[class*="group/turn-diff-header"]').forEach((header) => {
+      const card = header.parentElement;
+      if (card) {
+        forceContrast(card, "background", "rgba(8, 27, 42, .94)");
+        forceContrast(card, "border", "1px solid rgba(169, 221, 244, .28)");
+        forceContrast(card, "color", "#f7fafc");
+      }
+      header.querySelectorAll("*").forEach((node) => {
+        const fogButton = node.closest?.("button.bg-token-bg-fog");
+        forceContrast(node, "color", fogButton ? "#1a1c1f" : "#f7fafc");
+      });
+      card?.querySelectorAll(".text-token-git-decoration-added-resource-foreground")
+        .forEach((node) => forceContrast(node, "color", "#49dc80"));
+      card?.querySelectorAll(".text-token-git-decoration-deleted-resource-foreground")
+        .forEach((node) => forceContrast(node, "color", "#ff7373"));
+    });
+
+    document.querySelectorAll(".text-token-text-tertiary").forEach((node) => {
+      if (!node.closest(".composer-surface-chrome")) {
+        forceContrast(node, "color", "#9fb9c8");
+        forceContrast(node, "opacity", "1");
+      }
+    });
+    document.querySelectorAll(".loading-shimmer-pure-text").forEach((node) => {
+      forceContrast(node, "color", "#9fb9c8");
+    });
+
+    const scheduledHeading = [...document.querySelectorAll("h1")]
+      .find((node) => node.textContent.trim() === "Scheduled tasks");
+    if (scheduledHeading) {
+      forceContrast(scheduledHeading, "color", "#f7fafc");
+      document.querySelectorAll("h2, h3").forEach((node) => {
+        forceContrast(node, "color", "#f7fafc");
+        forceContrast(node, "text-shadow", "0 2px 8px rgba(0, 0, 0, .72)");
+      });
+      scheduledHeading.parentElement?.querySelectorAll(":scope > *:not(h1)").forEach((node) => {
+        forceContrast(node, "color", "#b8cedb");
+      });
+      document.querySelectorAll(".automation-row").forEach((row) => {
+        forceContrast(row, "background", "rgba(8, 27, 42, .82)");
+        forceContrast(row, "border", "1px solid rgba(169, 221, 244, .2)");
+        forceContrast(row, "margin-bottom", "8px");
+        forceContrast(row, "opacity", "1");
+        row.querySelectorAll(".text-token-foreground").forEach((node) => {
+          forceContrast(node, "color", "#f7fafc");
+        });
+        row.querySelectorAll(".text-token-description-foreground").forEach((node) => {
+          forceContrast(node, "color", "#b8cedb");
+          forceContrast(node, "opacity", "1");
+        });
+      });
+      document.querySelectorAll('button[aria-pressed="true"]').forEach((node) => {
+        // A slightly deeper racing red keeps white All text above 4.5:1.
+        forceContrast(node, "background", "#d8142e");
+        forceContrast(node, "color", "#ffffff");
+        forceContrast(node, "border", "1px solid rgba(255, 255, 255, .28)");
+      });
+      document.querySelectorAll('button[aria-pressed="false"]').forEach((node) => {
+        forceContrast(node, "background", "rgba(8, 27, 42, .68)");
+        forceContrast(node, "color", "#d6e9f3");
+        forceContrast(node, "border", "1px solid rgba(169, 221, 244, .18)");
+      });
+
+      // Scheduled's native light input token and sticky fade sit above the
+      // image as their own cascade layer. Keep the live controls in the same
+      // dark pit-wall surface as the filter pills.
+      const scheduledSearch = document.querySelector("#scheduled-page-search");
+      if (scheduledSearch) {
+        const searchShell = scheduledSearch.parentElement;
+        const searchRow = searchShell?.parentElement;
+        const searchSticky = searchRow?.parentElement;
+        forceContrast(scheduledSearch, "color", "#f7fafc");
+        forceContrast(scheduledSearch, "caret-color", "#ff4351");
+        if (searchShell) {
+          forceContrast(searchShell, "background", "rgba(8, 27, 42, .88)");
+          forceContrast(searchShell, "border", "1px solid rgba(169, 221, 244, .34)");
+          forceContrast(searchShell, "color", "#b8cedb");
+        }
+        if (searchSticky) {
+          forceContrast(searchSticky, "background", "linear-gradient(180deg, rgba(7, 21, 34, .98) 0%, rgba(7, 21, 34, .94) 66%, rgba(7, 21, 34, .82) 100%)");
+          forceContrast(searchSticky, "border-bottom", "1px solid rgba(169, 221, 244, .18)");
+        }
+        const selectedFilter = document.querySelector('button[aria-pressed="true"]');
+        const filterRow = selectedFilter?.parentElement?.parentElement;
+        if (filterRow) {
+          forceContrast(filterRow, "background", "linear-gradient(135deg, rgba(8, 27, 42, .94), rgba(7, 21, 34, .80))");
+          forceContrast(filterRow, "border", "1px solid rgba(169, 221, 244, .22)");
+          forceContrast(filterRow, "color", "#f7fafc");
+        }
+      }
+    }
+  };
 
   const parseRgb = (value) => {
     if (!value || value === "transparent") return null;
@@ -169,11 +394,17 @@
     if (window[DISABLED_KEY]) return;
     const root = document.documentElement;
     if (!root) return;
-    const shell = detectShellMode();
+    const forcedShell = THEME.shellMode === "dark" || THEME.shellMode === "light"
+      ? THEME.shellMode : null;
+    const shell = forcedShell || detectShellMode();
     root.classList.add("codex-dream-skin");
     root.setAttribute(SHELL_ATTR, shell);
-    root.style.setProperty("--dream-skin-art", `url("${artUrl}")`);
+    root.style.setProperty("--dream-skin-art", `url("${artUrls.home}")`);
+    root.style.setProperty("--dream-skin-home-art", `url("${artUrls.home}")`);
+    root.style.setProperty("--dream-skin-task-art", `url("${artUrls.task}")`);
+    root.style.setProperty("--dream-skin-sidebar-art", `url("${artUrls.sidebar}")`);
     applyTheme(root, shell);
+    applyContrastFixes();
 
     let style = document.getElementById(STYLE_ID);
     if (!style) {
@@ -198,7 +429,10 @@
     if (home) home.classList.add("dream-skin-home");
 
     if (!shellMain || !document.body) return;
+    const scheduledHeading = [...document.querySelectorAll("h1")]
+      .find((node) => node.textContent.trim() === "Scheduled tasks");
     shellMain.classList.toggle("dream-skin-home-shell", Boolean(home));
+    shellMain.classList.toggle("dream-skin-scheduled-shell", Boolean(scheduledHeading));
     let chrome = document.getElementById(CHROME_ID);
     if (!chrome || chrome.parentElement !== document.body) {
       chrome?.remove();
@@ -234,11 +468,16 @@
     document.documentElement?.classList.remove("codex-dream-skin");
     document.documentElement?.removeAttribute(SHELL_ATTR);
     document.documentElement?.style.removeProperty("--dream-skin-art");
+    document.documentElement?.style.removeProperty("--dream-skin-home-art");
+    document.documentElement?.style.removeProperty("--dream-skin-task-art");
+    document.documentElement?.style.removeProperty("--dream-skin-sidebar-art");
     for (const name of THEME_VARIABLES) document.documentElement?.style.removeProperty(name);
     document.querySelectorAll(".dream-skin-home").forEach((node) => node.classList.remove("dream-skin-home"));
     document.querySelectorAll(".dream-skin-home-shell").forEach((node) => node.classList.remove("dream-skin-home-shell"));
+    document.querySelectorAll(".dream-skin-scheduled-shell").forEach((node) => node.classList.remove("dream-skin-scheduled-shell"));
     document.getElementById(STYLE_ID)?.remove();
     document.getElementById(CHROME_ID)?.remove();
+    restoreContrast();
     const state = window[STATE_KEY];
     state?.observer?.disconnect();
     if (state?.timer) clearInterval(state.timer);
@@ -247,7 +486,7 @@
     if (state?.mediaHandler && state?.mediaQuery) {
       try { state.mediaQuery.removeEventListener("change", state.mediaHandler); } catch {}
     }
-    if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
+    for (const artUrl of Object.values(state?.artUrls || {})) URL.revokeObjectURL(artUrl);
     delete window[STATE_KEY];
     return true;
   };
@@ -288,11 +527,17 @@
     resizeHandler,
     mediaQuery,
     mediaHandler,
-    artUrl,
+    artUrls,
+    restoreContrast,
     version: VERSION,
     themeId: THEME.id || "custom",
     detectShellMode,
   };
   ensure();
-  return { installed: true, version: VERSION, themeId: THEME.id || "custom", shell: detectShellMode() };
+  return {
+    installed: true,
+    version: VERSION,
+    themeId: THEME.id || "custom",
+    shell: THEME.shellMode === "dark" || THEME.shellMode === "light" ? THEME.shellMode : detectShellMode(),
+  };
 })(__DREAM_SKIN_CSS_JSON__, __DREAM_SKIN_ART_JSON__, __DREAM_SKIN_THEME_JSON__)

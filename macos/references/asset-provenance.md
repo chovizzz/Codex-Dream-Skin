@@ -11,3 +11,10 @@
 ## User themes
 
 Images chosen through Customize belong to the user (or their licensors).
+
+## APEX 53 preset
+
+- Files: `assets/apex-53-home.png`, `assets/apex-53-task.webp`, `assets/apex-53-sidebar.jpeg`
+- Origin: supplied by the theme user for local personalization
+- Purpose: landscape home hero, portrait task background, and portrait sidebar background
+- Rights: redistribution and commercial-use rights remain the responsibility of the user

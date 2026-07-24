@@ -238,7 +238,11 @@ async function loadTheme(themeDir) {
     projectLabel: text(raw.projectLabel, "◉  选择项目", 80),
     statusText: text(raw.statusText, "DREAM SKIN ONLINE", 80),
     quote: text(raw.quote, "MAKE SOMETHING WONDERFUL", 80),
+    shellMode: raw.shellMode === "dark" || raw.shellMode === "light" ? raw.shellMode : "auto",
     image: raw.image,
+    homeImage: text(raw.homeImage, raw.image, 160),
+    taskImage: text(raw.taskImage, raw.image, 160),
+    sidebarImage: text(raw.sidebarImage, raw.image, 160),
     colors: {
       background: color(raw.colors?.background, "#071116"),
       panel: color(raw.colors?.panel, "#0b1a20"),
@@ -252,16 +256,26 @@ async function loadTheme(themeDir) {
       line: color(raw.colors?.line, "rgba(124, 255, 70, .28)"),
     },
   };
-  const imagePath = path.join(assetsRoot, theme.image);
-  const imageStat = await fs.stat(imagePath);
-  if (!imageStat.isFile() || imageStat.size < 1 || imageStat.size > MAX_ART_BYTES) {
-    throw new Error(`Theme image must be a non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+  const imageNames = {
+    home: theme.homeImage,
+    task: theme.taskImage,
+    sidebar: theme.sidebarImage,
+  };
+  const images = {};
+  for (const [role, imageName] of Object.entries(imageNames)) {
+    if (path.basename(imageName) !== imageName) throw new Error(`${role} theme image must stay inside its theme directory`);
+    const imagePath = path.join(assetsRoot, imageName);
+    const imageStat = await fs.stat(imagePath);
+    if (!imageStat.isFile() || imageStat.size < 1 || imageStat.size > MAX_ART_BYTES) {
+      throw new Error(`${role} theme image must be a non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+    }
+    const extension = path.extname(imageName).toLowerCase();
+    if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
+      throw new Error(`Unsupported ${role} theme image format: ${extension || "missing"}`);
+    }
+    images[role] = { imagePath, imageStat, extension };
   }
-  const extension = path.extname(theme.image).toLowerCase();
-  if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
-    throw new Error(`Unsupported theme image format: ${extension || "missing"}`);
-  }
-  return { assetsRoot, imagePath, imageStat, theme };
+  return { assetsRoot, images, theme };
 }
 
 async function loadPayload(themeDir) {
@@ -270,18 +284,21 @@ async function loadPayload(themeDir) {
     fs.readFile(path.join(root, "assets", "renderer-inject.js"), "utf8"),
     loadTheme(themeDir),
   ]);
-  const { imagePath, theme } = loaded;
-  const art = await fs.readFile(imagePath);
-  const extension = path.extname(imagePath).toLowerCase();
-  const mime = extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
-    : extension === ".webp" ? "image/webp" : "image/png";
-  const artDataUrl = `data:${mime};base64,${art.toString("base64")}`;
+  const { images, theme } = loaded;
+  const artEntries = await Promise.all(Object.entries(images).map(async ([role, image]) => {
+    const art = await fs.readFile(image.imagePath);
+    const mime = image.extension === ".jpg" || image.extension === ".jpeg" ? "image/jpeg"
+      : image.extension === ".webp" ? "image/webp" : "image/png";
+    return [role, { dataUrl: `data:${mime};base64,${art.toString("base64")}`, bytes: art.length }];
+  }));
+  const arts = Object.fromEntries(artEntries);
+  const artDataUrls = Object.fromEntries(artEntries.map(([role, art]) => [role, art.dataUrl]));
   const payload = template
     .replace("__DREAM_SKIN_CSS_JSON__", JSON.stringify(css))
-    .replace("__DREAM_SKIN_ART_JSON__", JSON.stringify(artDataUrl))
+    .replace("__DREAM_SKIN_ART_JSON__", JSON.stringify(artDataUrls))
     .replace("__DREAM_SKIN_THEME_JSON__", JSON.stringify(theme))
     .replace("__DREAM_SKIN_VERSION_JSON__", JSON.stringify(SKIN_VERSION));
-  return { imageBytes: art.length, payload, theme };
+  return { imageBytes: Object.values(arts).reduce((total, art) => total + art.bytes, 0), payload, theme };
 }
 
 async function applyToSession(session, payload) {
@@ -510,6 +527,7 @@ try {
       version: SKIN_VERSION,
       themeId: loaded.theme.id,
       themeName: loaded.theme.name,
+      shellMode: loaded.theme.shellMode,
       imageBytes: loaded.imageBytes,
       payloadBytes: Buffer.byteLength(loaded.payload),
     }, null, 2));

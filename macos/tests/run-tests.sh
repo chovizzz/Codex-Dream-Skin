@@ -28,7 +28,11 @@ if /usr/bin/grep -n -E '/usr/bin/python3|(^|[[:space:]])eval([[:space:]]|$)' \
   exit 1
 fi
 
-"$NODE" "$ROOT/scripts/injector.mjs" --check-payload >/dev/null
+DEFAULT_PAYLOAD_JSON="$("$NODE" "$ROOT/scripts/injector.mjs" --check-payload)"
+"$NODE" -e '
+  const value = JSON.parse(process.argv[1]);
+  if (!value.pass || value.themeId !== "apex-53" || value.shellMode !== "dark") process.exit(1);
+' "$DEFAULT_PAYLOAD_JSON"
 
 TMP="$(/usr/bin/mktemp -d /tmp/codex-dream-skin-tests.XXXXXX)"
 trap '/bin/rm -rf "$TMP"' EXIT
@@ -60,6 +64,20 @@ EXPECTED_TEAM_ID="TEAM'ID"
   exit 1
 }
 
+THEME_INIT_HOME="$TMP/theme-init-home"
+/usr/bin/env HOME="$THEME_INIT_HOME" NODE="$NODE" /bin/bash -c '
+  . "$1/scripts/common-macos.sh"
+  ensure_state_root
+  ensure_active_theme
+  [ -f "$THEME_DIR/theme.json" ]
+  [ -f "$THEME_DIR/apex-53-home.png" ]
+  [ -f "$THEME_DIR/apex-53-task.webp" ]
+  [ -f "$THEME_DIR/apex-53-sidebar.jpeg" ]
+  first_checksum="$(/usr/bin/shasum -a 256 "$THEME_DIR/theme.json")"
+  ensure_active_theme
+  [ "$first_checksum" = "$(/usr/bin/shasum -a 256 "$THEME_DIR/theme.json")" ]
+' _ "$ROOT"
+
 /bin/mkdir -p "$TMP/theme"
 /bin/cp "$ROOT/assets/portal-hero.png" "$TMP/theme/background.png"
 "$NODE" "$ROOT/scripts/write-theme.mjs" custom --output-dir "$TMP/theme" \
@@ -68,7 +86,7 @@ EXPECTED_TEAM_ID="TEAM'ID"
 PAYLOAD_JSON="$("$NODE" "$ROOT/scripts/injector.mjs" --check-payload --theme-dir "$TMP/theme")"
 "$NODE" -e '
   const value = JSON.parse(process.argv[1]);
-  if (!value.pass || value.themeName !== "测试主题" || value.imageBytes < 1) process.exit(1);
+  if (!value.pass || value.themeName !== "测试主题" || value.shellMode !== "auto" || value.imageBytes < 1) process.exit(1);
 ' "$PAYLOAD_JSON"
 /bin/mkdir -p "$TMP/missing-theme"
 if MISSING_THEME_OUTPUT="$(
