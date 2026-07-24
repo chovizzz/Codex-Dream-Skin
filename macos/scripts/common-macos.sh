@@ -758,8 +758,11 @@ hot_reapply_theme() {
 # Older builds used `launchctl submit` which can relaunch Codex after the user quits
 # or after SwiftBar exits — that is unexpected and unwanted.
 release_codex_launchd_job() {
-  /bin/launchctl remove "gui/$(/usr/bin/id -u)/$CODEX_APP_JOB_LABEL" >/dev/null 2>&1 || true
-  /bin/launchctl remove "$CODEX_APP_JOB_LABEL" >/dev/null 2>&1 || true
+  local label=""
+  for label in "$CODEX_APP_JOB_LABEL" "com.codex-dream-skin.apex53-once"; do
+    /bin/launchctl remove "gui/$(/usr/bin/id -u)/$label" >/dev/null 2>&1 || true
+    /bin/launchctl remove "$label" >/dev/null 2>&1 || true
+  done
 }
 
 launch_codex_normally() {

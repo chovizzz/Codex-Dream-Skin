@@ -24,6 +24,10 @@ generated platform copies.
   collapse runtime failures into a generic "inject failed" message.
 - Node Inspector may listen only on `127.0.0.1:9229`, only for a short pulse.
   Verify listener ownership and `process.pid`, then confirm the port closes.
+- Never submit Codex, `start-dream-skin-macos.sh`, or a delayed apply through
+  `launchctl submit`. macOS infers KeepAlive for submitted jobs, which relaunches
+  Codex after a user quits and also captures the submitter's environment. Only
+  the passive pulse watcher may use launchd, and it must never launch Codex.
 
 ## Multi-Image Themes
 

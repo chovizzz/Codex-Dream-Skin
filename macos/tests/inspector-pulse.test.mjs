@@ -123,6 +123,7 @@ assert.throws(
 
 const startSource = await fs.readFile(path.join(scriptsDir, "start-dream-skin-macos.sh"), "utf8");
 const commonSource = await fs.readFile(path.join(scriptsDir, "common-macos.sh"), "utf8");
+const installSource = await fs.readFile(path.join(scriptsDir, "install-dream-skin-macos.sh"), "utf8");
 const switchSource = await fs.readFile(path.join(scriptsDir, "switch-theme-macos.sh"), "utf8");
 assert.doesNotMatch(startSource, /--remote-debugging-(?:address|port)/);
 assert.doesNotMatch(commonSource, /--remote-debugging-(?:address|port)/);
@@ -131,5 +132,17 @@ assert.match(switchSource, /HOT_REAPPLY_ERROR/);
 assert.doesNotMatch(commonSource, /"\$PULSE" --apply[^\n]*[\s\S]{0,220}>\/dev\/null 2>&1/);
 assert.match(commonSource, /HOT_REAPPLY_ERROR=.*head -n 1/);
 assert.doesNotMatch(commonSource, /HOT_REAPPLY_ERROR=.*tail -n 1/);
+assert.match(commonSource, /com\.codex-dream-skin\.apex53-once/);
+assert.match(startSource, /release_codex_launchd_job/);
+const installCleanupIndex = installSource.indexOf("release_codex_launchd_job");
+const installRunningGuardIndex = installSource.indexOf(
+  'codex_is_running && fail "Close Codex before installation',
+);
+assert.ok(
+  installCleanupIndex >= 0
+    && installRunningGuardIndex >= 0
+    && installCleanupIndex < installRunningGuardIndex,
+  "Installer must remove legacy Codex keepalive jobs before checking whether Codex is running",
+);
 
 console.log("PASS: Node Inspector pulse transport is scoped, identity-checked, and short-lived.");

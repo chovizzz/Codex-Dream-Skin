@@ -42,6 +42,7 @@ done
 PORT="$INSPECTOR_PORT"
 
 ensure_state_root
+release_codex_launchd_job
 if [ "$FOREGROUND_INJECTOR" != "true" ]; then
   OPERATION_TOKEN="$(new_operation_token)"
   write_operation_state applying "正在应用皮肤" "$OPERATION_TOKEN" \

@@ -71,6 +71,7 @@ if [ "$IN_PLACE" = "false" ] && [ "$PROJECT_ROOT" != "$INSTALL_ROOT" ]; then
   # Run the cheap precondition before any engine bytes move: aborting after
   # the copy forces a rollback of a perfectly good previous engine, and an
   # interrupted rollback is how a mixed-version tree ships.
+  release_codex_launchd_job
   codex_is_running && fail "Close Codex before installation so config.toml cannot be rewritten while the app is saving it."
   /bin/mkdir -p "$(dirname "$INSTALL_ROOT")"
   deploy_project
@@ -90,6 +91,7 @@ fi
 discover_codex_app
 require_macos_runtime
 ensure_state_root
+release_codex_launchd_job
 codex_is_running && fail "Close Codex before installation so config.toml cannot be rewritten while the app is saving it."
 seed_bundled_presets
 if [ ! -f "$THEME_DIR/theme.json" ]; then
