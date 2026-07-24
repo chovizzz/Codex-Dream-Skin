@@ -56,6 +56,33 @@ try {
   assert.deepEqual(await fs.readFile(path.join(stage, "background-a.png")), stagedBeforeMutation);
   assert.equal(JSON.parse(await fs.readFile(path.join(stage, "theme.json"), "utf8")).name, "A");
 
+  const multiSource = path.join(tempRoot, "themes", "preset-multi");
+  const multiStage = path.join(tempRoot, "multi-stage");
+  await fs.mkdir(multiSource, { recursive: true });
+  await fs.mkdir(multiStage);
+  for (const name of ["home.png", "task.png", "sidebar.png"]) {
+    await fs.copyFile(fixtureAsset, path.join(multiSource, name));
+  }
+  await fs.writeFile(
+    path.join(multiSource, "theme.json"),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      id: "preset-multi",
+      image: "home.png",
+      homeImage: "home.png",
+      taskImage: "task.png",
+      sidebarImage: "sidebar.png",
+    })}\n`,
+  );
+  const stagedNames = (await runStage(multiSource, multiStage)).trim().split("\n");
+  assert.deepEqual(stagedNames, ["home.png", "task.png", "sidebar.png"]);
+  for (const name of stagedNames) {
+    assert.deepEqual(
+      await fs.readFile(path.join(multiStage, name)),
+      await fs.readFile(path.join(multiSource, name)),
+    );
+  }
+
   const outside = path.join(tempRoot, "outside.png");
   await fs.copyFile(fixtureAsset, outside);
   const traversal = path.join(tempRoot, "traversal");

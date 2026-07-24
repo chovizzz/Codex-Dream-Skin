@@ -1,7 +1,7 @@
 ---
 name: codex-dream-skin-studio
-description: Install, customize, launch, verify, repair, update, or restore Codex Dream Skin Studio on macOS. Use when a user wants to turn a personal image into one continuous full-window Codex wallpaper with adaptive readability layers while preserving the native interface, or needs safe CDP theme troubleshooting and rollback.
-compatibility: macOS, official Codex Desktop app, signed bundled Node.js 20 or newer
+description: Install, customize, launch, verify, repair, update, or restore Codex Dream Skin Studio on macOS. Use when a user wants to turn a personal image into one continuous full-window Codex wallpaper with adaptive readability layers while preserving the native interface, or needs safe Node Inspector pulse troubleshooting and rollback.
+compatibility: macOS, official Codex Desktop app, signed bundled Node.js 22 or newer
 ---
 
 # Codex Dream Skin Studio
@@ -19,17 +19,19 @@ This file is an optional Codex capability entry. The delivery is a complete stan
 
 - Never modify the official `.app`, `app.asar`, or its code signature.
 - Use the official Codex app's signed Node.js runtime only after validating its signature, Team ID, architecture, and minimum version.
-- Bind CDP to loopback, verify that the listener belongs to Codex, and reject non-Codex renderer targets.
+- Use only a brief loopback Node Inspector pulse, reject an unrelated `9229`
+  listener, verify the attached main-process PID, and close Inspector after use.
 - Preserve all native cards, navigation, project selectors, task content, composer controls, and keyboard focus.
 - Theme images must be UI-free wallpapers. Paint one 16:9 image continuously across the window; keep home expressive and task routes quieter. `appearance: auto` follows Codex/native or system appearance rather than image brightness.
 - Keep decoration at `pointer-events: none`.
-- Require explicit authorization before restarting an already-running Codex instance.
+- Do not restart an already-running Codex instance just to apply a theme.
 - Stop an injector only when its recorded PID, executable, command line, and start time all match.
 
 ## Key resources
 
 - `README.md`: user installation and customization guide.
-- `scripts/injector.mjs`: CDP connection, injection, removal, verification, and screenshots.
+- `scripts/inspector-pulse.mjs`: main-process Inspector pulse, PID watcher, removal, verification, and screenshots.
+- `scripts/injector.mjs`: theme validation and renderer payload compiler.
 - `assets/dream-skin.css`: live native interface styling.
 - `assets/renderer-inject.js`: idempotent DOM integration and cleanup.
 - `scripts/doctor-macos.sh`: signed-runtime, payload, and optional live-session self-check.

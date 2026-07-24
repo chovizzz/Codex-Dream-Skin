@@ -93,6 +93,7 @@ RUNTIME_SCRIPTS=(
   doctor-macos.sh
   image-metadata.mjs
   injector.mjs
+  inspector-pulse.mjs
   install-dream-skin-macos.sh
   load-image-theme-macos.sh
   pause-dream-skin-macos.sh

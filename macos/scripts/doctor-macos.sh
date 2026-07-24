@@ -19,19 +19,30 @@ for required in \
   "$PROJECT_ROOT/assets/renderer-inject.js" \
   "$PROJECT_ROOT/assets/selectors.json" \
   "$PROJECT_ROOT/assets/theme.json" \
-  "$PROJECT_ROOT/scripts/injector.mjs"; do
+  "$PROJECT_ROOT/scripts/injector.mjs" \
+  "$PROJECT_ROOT/scripts/inspector-pulse.mjs"; do
   [ -s "$required" ] || fail "Required project file is missing or empty: $required"
 done
 
 PAYLOAD_JSON="$("$NODE" "$INJECTOR" --check-payload --theme-dir "$THEME_DIR")"
-PORT=9341
-if [ -f "$STATE_PATH" ]; then
-  PORT="$(state_field port)"
-fi
+PORT="$INSPECTOR_PORT"
 LIVE="false"
-if [ -f "$STATE_PATH" ] && verified_cdp_endpoint "$PORT"; then
-  "$NODE" "$INJECTOR" --verify --port "$PORT" --theme-dir "$THEME_DIR" --timeout-ms 12000 >/dev/null
-  LIVE="true"
+STATE_VERSION=""
+STATE_PROTOCOL=""
+STATE_SESSION=""
+if [ -f "$STATE_PATH" ]; then
+  STATE_VERSION="$(state_field skinVersion 2>/dev/null || true)"
+  STATE_PROTOCOL="$(state_field injectorProtocol 2>/dev/null || true)"
+  STATE_SESSION="$(state_field session 2>/dev/null || true)"
+fi
+if [ "$STATE_VERSION" = "$SKIN_VERSION" ] && [ "$STATE_PROTOCOL" = "4" ] \
+  && [ "$STATE_SESSION" = "active" ] && codex_is_running; then
+  CODEX_PID="$(codex_main_pids | /usr/bin/head -n 1)"
+  if [ -n "$CODEX_PID" ] && "$NODE" "$PULSE" --verify --pid "$CODEX_PID" \
+    --codex-exe "$CODEX_EXE" --port "$PORT" --theme-dir "$THEME_DIR" \
+    --timeout-ms 12000 >/dev/null; then
+    LIVE="true"
+  fi
 fi
 [ "$REQUIRE_LIVE" = "false" ] || [ "$LIVE" = "true" ] || fail "No verified live Dream Skin session is active."
 
@@ -47,6 +58,7 @@ fi
     nodeVersion: process.argv[6],
     officialAppSignatureValid: true,
     modifiesAppAsar: false,
+    inspectorPersistent: false,
     live: process.argv[7] === "true",
     port: Number(process.argv[8]),
     theme: {

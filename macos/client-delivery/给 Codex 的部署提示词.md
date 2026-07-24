@@ -39,7 +39,7 @@
    `~/.codex/codex-dream-skin-studio/scripts/customize-theme-macos.sh --image "<图片绝对路径>" --name "我的 Codex Dream Skin" --no-apply`
    如果我在消息中另写了主题名称、口号或配色，则优先使用我提供的内容。必须让脚本完成图片转换与压缩，不要手工覆盖项目源文件。若没有图片，保留项目内置示例主题。
 
-6. 我明确授权你在本次部署中关闭并重启官方 Codex 一次，以启用本机回环 CDP。只允许处理官方 Codex 及本项目可核验身份的注入守护进程，不得关闭其他应用。使用安装后的启动脚本执行真实重启，不要让我自行猜测是否生效。
+6. 使用短时 Node Inspector pulse 注入：不得为了启用主题而关闭或重启已经运行的 Codex，不得添加 Chromium remote-debugging 参数。只允许连接经过签名和 PID 校验的官方 Codex 主进程；`9229` 必须在每次 apply、verify 或 remove 后立即关闭。
 
 7. 启动后必须运行：
    - `~/.codex/codex-dream-skin-studio/scripts/doctor-macos.sh --require-live`
@@ -52,7 +52,7 @@
    - `Codex Dream Skin - Verify.command`
    - `Codex Dream Skin - Restore.command`
 
-9. 如果失败，读取 `~/Library/Application Support/CodexDreamSkinStudio/` 下的日志并继续修复。不得降低代码签名、回环端口归属、PID 身份、原生结构或截图验证标准；不得用“预计重启后生效”“应该完成”等措辞代替验收。
+9. 如果失败，读取 `~/Library/Application Support/CodexDreamSkinStudio/` 下的日志并继续修复。不得降低代码签名、Inspector 端口归属、PID 身份、主窗口筛选、原生结构或截图验证标准；不得用“预计重启后生效”“应该完成”等措辞代替验收。
 
 最终向我汇报：
 - Codex 主题编辑器版本与官方 Codex 版本；

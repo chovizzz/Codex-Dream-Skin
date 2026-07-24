@@ -15,7 +15,7 @@ public struct StatusSnapshot: Equatable, Sendable {
     session: String = "unknown",
     operation: String = "",
     operationMessage: String = "",
-    port: Int = 9341,
+    port: Int = 9229,
     injectorAlive: Bool = false,
     cdpOK: Bool = false,
     codexRunning: Bool = false,
@@ -46,7 +46,7 @@ public struct StatusSnapshot: Equatable, Sendable {
     } else if let text = value["port"] as? String, let parsed = Int(text) {
       port = parsed
     } else {
-      port = 9341
+      port = 9229
     }
     injectorAlive = value["injectorAlive"] as? Bool ?? false
     cdpOK = value["cdpOk"] as? Bool ?? false

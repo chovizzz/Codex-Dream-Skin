@@ -12,6 +12,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 INJECTOR="$SCRIPT_DIR/injector.mjs"
+PULSE="$SCRIPT_DIR/inspector-pulse.mjs"
 INSTALL_ROOT="$HOME/.codex/codex-dream-skin-studio"
 STATE_ROOT="$HOME/Library/Application Support/CodexDreamSkinStudio"
 STATE_PATH="$STATE_ROOT/state.json"
@@ -29,11 +30,13 @@ CODEX_APP_JOB_LABEL="com.openai.codex-dream-skin-studio.app"
 INJECTOR_JOB_LABEL="com.openai.codex-dream-skin-studio.injector"
 EXPECTED_CODEX_TEAM_ID="2DC432GLL2"
 EXPECTED_CODEX_REQUIREMENT="anchor apple generic and certificate leaf[subject.OU] = \"$EXPECTED_CODEX_TEAM_ID\""
-SKIN_VERSION="1.3.3"
+SKIN_VERSION="1.4.0"
+INSPECTOR_PORT=9229
 DREAM_SKIN_VALIDATED_RUNTIME_PID=""
 DREAM_SKIN_VALIDATED_RUNTIME_BUNDLE=""
 DREAM_SKIN_VALIDATED_RUNTIME_EXE=""
 DREAM_SKIN_VALIDATED_RUNTIME_NODE=""
+HOT_REAPPLY_ERROR=""
 
 fail() {
   local message="$*"
@@ -175,32 +178,26 @@ clear_operation_state() {
 }
 
 begin_client_operation() {
-  local port="$1"
+  local _port="$1"
   local kind="$2"
-  local timeout_ms="${3:-3000}"
+  local _timeout_ms="${3:-3000}"
   local token="${4:-}"
   case "$kind" in apply|pause|switch) ;; *) return 1 ;; esac
   [ -n "$token" ] || token="$(new_operation_token)"
-  operation_token_is_valid "$token" || return 1
-  token="$("$NODE" "$INJECTOR" --begin-operation --operation-kind "$kind" \
-    --operation-token "$token" --port "$port" --timeout-ms "$timeout_ms" \
-    2>>"$INJECTOR_ERROR_LOG")" || return 1
   operation_token_is_valid "$token" || return 1
   /usr/bin/printf '%s\n' "$token"
 }
 
 finish_client_operation() {
-  local port="$1"
+  local _port="$1"
   local state="$2"
   local message="$3"
   local token="$4"
-  local timeout_ms="${5:-1500}"
+  local _timeout_ms="${5:-1500}"
   case "$state" in success|error|cancelled) ;; *) return 1 ;; esac
   operation_token_is_valid "$token" || return 1
-  [ -n "${NODE:-}" ] && [ -x "$NODE" ] || return 1
-  "$NODE" "$INJECTOR" --finish-operation --operation-ui-state "$state" \
-    --operation-message "$message" --operation-token "$token" \
-    --port "$port" --timeout-ms "$timeout_ms" 2>>"$INJECTOR_ERROR_LOG"
+  case "$message" in *$'\n'*|*$'\r'*) return 1 ;; esac
+  [ "${#message}" -le 240 ]
 }
 
 # Seed bundled preset packs into the user's themes/ library so a fresh install
@@ -308,7 +305,7 @@ require_signed_node_runtime() {
   node_major="${NODE_VERSION#v}"
   node_major="${node_major%%.*}"
   case "$node_major" in ''|*[!0-9]*) fail "Could not parse bundled Node.js version: $NODE_VERSION" ;; esac
-  [ "$node_major" -ge 20 ] || fail "ChatGPT bundled Node.js $NODE_VERSION is too old; version 20 or newer is required."
+  [ "$node_major" -ge 22 ] || fail "ChatGPT bundled Node.js $NODE_VERSION is too old for Inspector pulses; update ChatGPT to get Node.js 22 or newer."
 
   NODE="$RUNTIME_NODE"
   export NODE RUNTIME_NODE NODE_VERSION CODEX_TEAM_ID NODE_TEAM_ID
@@ -397,7 +394,7 @@ recorded_injector_process_matches() {
   node_lower="$(printf '%s' "$expected_node" | /usr/bin/tr '[:upper:]' '[:lower:]')"
   case "$command_lower" in "$node_lower "*) ;; *) return 1 ;; esac
   # The watcher launch shape is deliberately matched as tokens.  In
-  # particular, `--port 93410` must never satisfy a saved `9341` identity.
+  # In particular, a near-prefix port must never satisfy the saved port identity.
   case "$command_lower" in
     *"$injector_lower --watch --port $expected_port --theme-dir "*) ;;
     *) return 1 ;;
@@ -435,14 +432,6 @@ stop_codex() {
   return 0
 }
 
-listener_pids() {
-  /usr/sbin/lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | /usr/bin/sort -u || true
-}
-
-port_is_available() {
-  [ -z "$(listener_pids "$1")" ]
-}
-
 canonical_existing_path() {
   local input="$1"
   local directory
@@ -466,80 +455,6 @@ pid_is_codex_executable() {
   actual_canonical="$(canonical_existing_path "$actual" 2>/dev/null || true)"
   expected_canonical="$(canonical_existing_path "$CODEX_EXE" 2>/dev/null || true)"
   [ -n "$actual_canonical" ] && [ "$actual_canonical" = "$expected_canonical" ]
-}
-
-pid_is_codex_descendant() {
-  local current="$1"
-  local command_line=""
-  local parent=""
-  local depth=0
-  while [ "$current" -gt 1 ] 2>/dev/null && [ "$depth" -lt 32 ]; do
-    command_line="$(/bin/ps -p "$current" -o command= 2>/dev/null || true)"
-    case "$command_line" in
-      "$CODEX_EXE"*) pid_is_codex_executable "$current" && return 0 ;;
-    esac
-    parent="$(/bin/ps -p "$current" -o ppid= 2>/dev/null | /usr/bin/awk '{$1=$1; print}')"
-    case "$parent" in ''|*[!0-9]*) return 1 ;; esac
-    [ "$parent" -ne "$current" ] || return 1
-    current="$parent"
-    depth=$((depth + 1))
-  done
-  return 1
-}
-
-port_belongs_to_codex() {
-  local port="$1"
-  local found="false"
-  local pid
-  while IFS= read -r pid; do
-    [ -n "$pid" ] || continue
-    found="true"
-    pid_is_codex_descendant "$pid" || return 1
-  done < <(listener_pids "$port")
-  [ "$found" = "true" ]
-}
-
-# Cheap: can we talk to a loopback DevTools HTTP endpoint?
-cdp_http_ready() {
-  local port="$1"
-  /usr/bin/curl --noproxy '*' --silent --fail --max-time 1 \
-    "http://127.0.0.1:${port}/json/version" >/dev/null 2>&1
-}
-
-verified_cdp_endpoint() {
-  local port="$1"
-  port_belongs_to_codex "$port" || return 1
-  cdp_http_ready "$port"
-}
-
-select_available_port() {
-  local preferred="$1"
-  local candidate="$preferred"
-  local last=$((preferred + 100))
-  [ "$last" -le 65535 ] || last=65535
-  while [ "$candidate" -le "$last" ]; do
-    if port_is_available "$candidate"; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-    candidate=$((candidate + 1))
-  done
-  fail "No free loopback port was found between $preferred and $last."
-}
-
-wait_for_cdp() {
-  local port="$1"
-  local deadline=$((SECONDS + 45))
-  local last_note=0
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    verified_cdp_endpoint "$port" && return 0
-    if [ $((SECONDS - last_note)) -ge 8 ]; then
-      last_note=$SECONDS
-      printf 'Waiting for ChatGPT debug port %s… (%ss)\n' "$port" "$SECONDS" >&2
-    fi
-    /bin/sleep 0.35
-  done
-  return 1
 }
 
 state_field() {
@@ -570,7 +485,7 @@ write_state() {
       schemaVersion: 4,
       platform: `darwin-${arch}`,
       skinVersion: version,
-      injectorProtocol: 3,
+      injectorProtocol: 4,
       port: Number(port),
       injectorPid: Number(pid),
       injectorStartedAt: startedAt,
@@ -585,7 +500,7 @@ write_state() {
       projectRoot: root,
       themeDir,
       session,
-      injectorMode: "full",
+      injectorMode: "pulse",
       createdAt: new Date().toISOString()
     };
     if (session === "active") {
@@ -599,7 +514,7 @@ write_state() {
     const temporary = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(temporary, file);
-  ' "$STATE_PATH" "$SKIN_VERSION" "$port" "$injector_pid" "$injector_started_at" "$INJECTOR" "$NODE" "$node_ver" "$bundle" "$exe" "$app_ver" "$team" "$PROJECT_ROOT" "$THEME_DIR" "$codex_pid" "$(/usr/bin/uname -m)" "$session"
+  ' "$STATE_PATH" "$SKIN_VERSION" "$port" "$injector_pid" "$injector_started_at" "$PULSE" "$NODE" "$node_ver" "$bundle" "$exe" "$app_ver" "$team" "$PROJECT_ROOT" "$THEME_DIR" "$codex_pid" "$(/usr/bin/uname -m)" "$session"
 }
 
 mark_state_active() {
@@ -612,7 +527,7 @@ mark_state_active() {
     state.session = "active";
     state.appliedThemeId = String(theme.id || "");
     state.appliedThemeName = String(theme.name || theme.id || "");
-    state.injectorMode = "full";
+    state.injectorMode = "pulse";
     delete state.pausedAt;
     state.verifiedAt = new Date().toISOString();
     state.updatedAt = state.verifiedAt;
@@ -725,6 +640,7 @@ stop_recorded_injector() {
 
 launch_injector_daemon() {
   local port="$1"
+  local codex_pid="${2:-0}"
   local pid=""
   local deadline=$((SECONDS + 10))
   : > "$INJECTOR_LOG"
@@ -734,8 +650,8 @@ launch_injector_daemon() {
   # SwiftBar may terminate background children when a click action finishes.
   # A submitted user job owns the watcher independently of that action.
   if /bin/launchctl submit -l "$INJECTOR_JOB_LABEL" -o "$INJECTOR_LOG" -e "$INJECTOR_ERROR_LOG" -- \
-    "$NODE" "$INJECTOR" --watch --port "$port" --theme-dir "$THEME_DIR" \
-    --operation-state "$OPERATION_STATE_PATH" --operation-ack "$OPERATION_ACK_PATH" \
+    "$NODE" "$PULSE" --watch --port "$port" --theme-dir "$THEME_DIR" \
+    --codex-exe "$CODEX_EXE" --initial-pid "$codex_pid" \
     >/dev/null 2>&1; then
     while [ "$SECONDS" -lt "$deadline" ]; do
       pid="$(/bin/launchctl print "gui/$(/usr/bin/id -u)/$INJECTOR_JOB_LABEL" 2>/dev/null \
@@ -750,8 +666,8 @@ launch_injector_daemon() {
   fi
 
   # Fallback for systems where launchctl submit is unavailable.
-  /usr/bin/nohup "$NODE" "$INJECTOR" --watch --port "$port" --theme-dir "$THEME_DIR" \
-    --operation-state "$OPERATION_STATE_PATH" --operation-ack "$OPERATION_ACK_PATH" \
+  /usr/bin/nohup "$NODE" "$PULSE" --watch --port "$port" --theme-dir "$THEME_DIR" \
+    --codex-exe "$CODEX_EXE" --initial-pid "$codex_pid" \
     >>"$INJECTOR_LOG" 2>>"$INJECTOR_ERROR_LOG" &
   pid="$!"
   /bin/sleep 0.15
@@ -775,51 +691,63 @@ ensure_node_runtime() {
   require_signed_node_runtime
 }
 
-# Fast path when CDP is already open: restart injector + one-shot inject.
-# Returns 0 on success, 1 if CDP is not ready (caller should full-start).
+# Fast path for a running Codex process: pulse once, then ensure the PID watcher
+# is alive for future normal launches. The Inspector closes after each pulse.
 hot_reapply_theme() {
-  local port="${1:-9341}"
+  local port="${1:-9229}"
   local timeout_ms="${2:-8000}"
   local operation_token="${3:-}"
-  local operation_args=()
   local inj_pid=""
   local injector_protocol=""
-  local injector_mode=""
+  local saved_start=""
+  local saved_node=""
+  local saved_injector=""
+  local saved_port=""
   local started_at=""
   local codex_pid=""
+  local pulse_error=""
 
-  # A generic HTTP listener is not enough for a hot re-apply: only use the
-  # endpoint already verified as belonging to the official Codex process.
+  HOT_REAPPLY_ERROR=""
   ensure_node_runtime || return 1
-  verified_cdp_endpoint "$port" || return 1
+  port="$INSPECTOR_PORT"
+  codex_pid="$(codex_main_pids 2>/dev/null | /usr/bin/head -n 1)"
+  [ -n "$codex_pid" ] || return 1
   [ -n "$operation_token" ] || operation_token="$(new_operation_token)"
   write_operation_state applying "正在应用已选主题" "$operation_token" || return 1
-  operation_args=(--operation-token "$operation_token")
 
   injector_protocol="$(state_field injectorProtocol 2>/dev/null || true)"
-  injector_mode="$(state_field injectorMode 2>/dev/null || true)"
-  if [ "$injector_protocol" = "2" ] || [ "$injector_protocol" = "3" ]; then
-    inj_pid="$(/bin/ps -axo pid=,command= | /usr/bin/awk -v inj="$INJECTOR" -v port="$port" '
-      index($0, inj) && index($0, "--watch") && index($0, "--port " port " --theme-dir ") { print $1; exit }
-    ')"
+  if [ "$injector_protocol" = "4" ]; then
+    inj_pid="$(state_field injectorPid 2>/dev/null || true)"
+    saved_start="$(state_field injectorStartedAt 2>/dev/null || true)"
+    saved_node="$(state_field nodePath 2>/dev/null || true)"
+    saved_injector="$(state_field injectorPath 2>/dev/null || true)"
+    saved_port="$(state_field port 2>/dev/null || true)"
+    if ! recorded_injector_process_matches \
+      "$inj_pid" "$saved_start" "$saved_node" "$saved_injector" "$saved_port"; then
+      inj_pid=""
+    fi
   fi
-  if ! "$NODE" "$INJECTOR" --once --port "$port" --theme-dir "$THEME_DIR" \
-    --timeout-ms "$timeout_ms" "${operation_args[@]}" >/dev/null 2>&1; then
+  pulse_error="$STATE_ROOT/.pulse-error.$$.log"
+  /bin/rm -f "$pulse_error"
+  if ! "$NODE" "$PULSE" --apply --pid "$codex_pid" --port "$port" \
+    --codex-exe "$CODEX_EXE" --theme-dir "$THEME_DIR" \
+    --timeout-ms "$timeout_ms" >/dev/null 2>"$pulse_error"; then
+    HOT_REAPPLY_ERROR="$(/usr/bin/head -n 1 "$pulse_error" 2>/dev/null || true)"
+    [ -s "$pulse_error" ] && /bin/cat "$pulse_error" >> "$START_ERROR_LOG" 2>/dev/null || true
+    /bin/rm -f "$pulse_error"
     return 1
   fi
+  /bin/rm -f "$pulse_error"
 
-  # A current watcher reloads theme files itself. Start one only when absent.
-  if [ -n "$inj_pid" ] && /bin/kill -0 "$inj_pid" 2>/dev/null \
-    && [ "$injector_mode" != "control" ]; then
+  if [ -n "$inj_pid" ] && /bin/kill -0 "$inj_pid" 2>/dev/null; then
     mark_state_active || return 1
     write_operation_state success "皮肤已应用" "$operation_token" || return 1
     return 0
   fi
   stop_recorded_injector 2>/dev/null || return 1
-  inj_pid="$(launch_injector_daemon "$port")"
+  inj_pid="$(launch_injector_daemon "$port" "$codex_pid")"
   /bin/kill -0 "$inj_pid" 2>/dev/null || return 1
   started_at="$(process_started_at "$inj_pid")"
-  codex_pid="$(codex_main_pids 2>/dev/null | /usr/bin/head -n 1)"
   [ -n "$started_at" ] || started_at="$(/bin/date)"
   write_state "$port" "$inj_pid" "$started_at" "${codex_pid:-0}" active
   write_operation_state success "皮肤已应用" "$operation_token" || return 1
@@ -834,27 +762,21 @@ release_codex_launchd_job() {
   /bin/launchctl remove "$CODEX_APP_JOB_LABEL" >/dev/null 2>&1 || true
 }
 
-launch_codex_with_cdp() {
-  local port="$1"
+launch_codex_normally() {
   : > "$APP_LOG"
   : > "$APP_ERROR_LOG"
   release_codex_launchd_job
-  # Start as a normal user process (NOT launchctl submit). submit keeps a job
-  # that will restart Codex when the window is closed.
-  /usr/bin/open -na "$CODEX_BUNDLE" --args \
-    --remote-debugging-address=127.0.0.1 \
-    --remote-debugging-port="$port" \
-    >>"$APP_LOG" 2>>"$APP_ERROR_LOG" || true
-  # Fallback if open failed to pass args on some builds
+  /usr/bin/open -na "$CODEX_BUNDLE" >>"$APP_LOG" 2>>"$APP_ERROR_LOG" || true
   if ! codex_is_running; then
-    /usr/bin/nohup "$CODEX_EXE" \
-      --remote-debugging-address=127.0.0.1 \
-      --remote-debugging-port="$port" \
-      >>"$APP_LOG" 2>>"$APP_ERROR_LOG" &
+    /usr/bin/nohup "$CODEX_EXE" >>"$APP_LOG" 2>>"$APP_ERROR_LOG" &
   fi
 }
 
-launch_codex_normally() {
-  release_codex_launchd_job
-  /usr/bin/open -na "$CODEX_BUNDLE"
+wait_for_codex_main() {
+  local deadline=$((SECONDS + 45))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    codex_is_running && return 0
+    /bin/sleep 0.25
+  done
+  return 1
 }

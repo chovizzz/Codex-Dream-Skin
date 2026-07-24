@@ -4,7 +4,10 @@ Unofficial macOS theme studio for the **official Codex Desktop** app.
 
 Turn an image you like into one continuous full-window Codex theme. The same wallpaper runs beneath the native sidebar and main surface, while route-aware translucency keeps home, task, plugin, scheduled-task, and pull-request controls fully interactive and readable.
 
-This project injects through **local loopback CDP**. It does **not** modify the official `.app`, `app.asar`, or code signature.
+On macOS, this project injects through a **brief local Node Inspector pulse**.
+Port `9229` opens only for the pulse and is closed immediately afterwards; no
+persistent Chromium CDP port is required. The project does **not** modify the
+official `.app`, `app.asar`, or code signature.
 
 > Not affiliated with OpenAI. Codex is a trademark of its respective owners.
 
@@ -12,11 +15,11 @@ This project injects through **local loopback CDP**. It does **not** modify the 
 
 - macOS 13 Ventura or newer (the native DMG app declares macOS 13 as its minimum)
 - Official Codex Desktop installed and launched at least once (`~/.codex/config.toml` exists)
-- No global Node.js install required (uses Codex’s signed bundled Node after validation)
+- No global Node.js install required (uses Codex’s signed bundled Node 22+ after signature and runtime-capability validation)
 
 ## Release install (recommended)
 
-普通用户请从 [GitHub Releases](https://github.com/Fei-Away/Codex-Dream-Skin/releases) 下载
+普通用户请从 [GitHub Releases](https://github.com/chovizzz/Codex-Dream-Skin/releases) 下载
 `CodexDreamSkin-vX.Y.Z.dmg`，按 [`docs/install-macos.md`](../docs/install-macos.md) 的图形界面步骤
 拖入 Applications。首次运行可能需要在“系统设置 → 隐私与安全性 → 仍要打开”确认一次；不需要
 运行 `xattr` 或安装源码。后续更新下载新的 DMG 覆盖安装即可，用户主题和图片会保留。
@@ -74,18 +77,27 @@ CSS/images.
 ## How it works (security boundary)
 
 1. Discover `com.openai.codex` and validate signature / Team ID / arch / bundled Node.
-2. Start Codex via user `launchd` with CDP bound to `127.0.0.1` only.
-3. Accept the debug port only when it belongs to Codex (or a legitimate child).
-4. Inject only into expected `app://` renderer targets.
-5. Resolve the selected theme and image to real paths, then enforce 16 MB,
-   `16384px`-per-side, and 50-megapixel limits before injection.
-6. Keep a small injector alive across reloads and route changes.
-7. Pause/Restore stops the injector only when PID, executable, script path, and
+2. Start Codex normally, without Chromium remote-debugging arguments.
+3. Signal the verified Codex main PID to open Node Inspector on loopback `9229`.
+4. Reject an Inspector listener owned by another PID, validate the Inspector
+   WebSocket URL, and confirm `process.pid` before evaluating anything.
+5. Ask Electron's main process to install guarded `dom-ready` and
+   `browser-window-created` hooks. Only `app://` targets that expose the real
+   Codex shell receive the renderer payload.
+6. Close Node Inspector immediately after every apply, verify, or remove pulse.
+   A lightweight PID watcher notices future normal Codex launches and pulses
+   once for each new main process; it never holds the Inspector port open.
+7. Resolve every selected theme image to a real path, then enforce the 16 MB,
+   `16384px`-per-side, and 50-megapixel limits on each before injection.
+8. Pause/Restore stops the PID watcher only when PID, executable, script path, and
    start time match the recorded job; a stop failure preserves state and aborts.
-8. Config backup/restore requires Codex to be closed, strict UTF-8, an operation
+9. Config backup/restore requires Codex to be closed, strict UTF-8, an operation
    lock, same-directory atomic replacement, and an unchanged-byte check.
 
-CDP is powerful and unauthenticated on loopback. Prefer Restore when you are done theming.
+Node Inspector is powerful and unauthenticated while open. Dream Skin refuses
+an unrelated `9229` listener and verifies that the attached PID is the expected
+Codex main process before use. A listening `9229` after an operation is an
+error; use Verify or Restore rather than leaving a debugger attached.
 
 ## Bundled presets
 
@@ -166,6 +178,33 @@ fields. Explicit art metadata (`focusX`, `focusY`, `safeArea`, `taskMode`) has
 the same priority over automatic inference. The home route remains expressive;
 task routes keep native content, cards, composer, and code readable above the
 image layer.
+
+### Multiple images by surface
+
+One-image themes remain unchanged. A theme pack can optionally provide separate
+artwork for the home hero, task routes, and sidebar; any omitted field falls
+back to the required `image` value:
+
+```json
+{
+  "schemaVersion": 1,
+  "image": "home.jpg",
+  "homeImage": "home.jpg",
+  "taskImage": "task.webp",
+  "sidebarImage": "sidebar.jpg",
+  "art": {
+    "home": { "focusX": 0.62, "focusY": 0.48, "fit": "cover" },
+    "task": { "focusX": 0.5, "focusY": 0.42, "fit": "contain" },
+    "sidebar": { "focusX": 0.5, "focusY": 0.5, "fit": "cover" }
+  }
+}
+```
+
+Use landscape 3:2–16:9 art for home, portrait/square art for a contained task
+layer, and portrait 2:3–3:4 art for the sidebar. Surface focus coordinates use
+the same normalized `0..1` convention as the base image. `fit` accepts `auto`,
+`cover`, or `contain`; in `auto`, portrait and square task images use `contain`
+while other surfaces use `cover`.
 
 CLI example:
 

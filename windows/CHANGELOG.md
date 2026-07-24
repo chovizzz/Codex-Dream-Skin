@@ -1,5 +1,9 @@
 # Windows Changelog
 
+## 1.4.0 — 2026-07-24
+
+- 仅同步跨平台发行版本号；Windows 注入、安装和托盘运行机制没有行为变化。本次功能更新只涉及 macOS Node Inspector pulse。
+
 ## 未发布
 
 ### 修复

@@ -120,11 +120,11 @@ function makeFixture({ nativeAppearance = "dark", settings = false, adopted = tr
     clearInterval(id) { intervals.delete(id); },
     console,
   };
-  const payloadFor = (theme = {}) => {
+  const payloadFor = (theme = {}, artData = "data:image/png;base64,AA==") => {
     const template = fixture.template;
     return template
       .replace("__DREAM_SKIN_CSS_JSON__", JSON.stringify(".fixture { color: red; }"))
-      .replace("__DREAM_SKIN_ART_JSON__", JSON.stringify("data:image/png;base64,AA=="))
+      .replace("__DREAM_SKIN_ART_JSON__", JSON.stringify(artData))
       .replace("__DREAM_SKIN_THEME_JSON__", JSON.stringify({ id: "fixture", appearance: "auto", ...theme }))
       .replace("__DREAM_SKIN_VERSION_JSON__", JSON.stringify("test"))
       .replace("__DREAM_SKIN_STYLE_REVISION_JSON__", JSON.stringify("css-rev"))
@@ -224,6 +224,32 @@ export async function runRendererRuntimeTest(assetRoot) {
   assert.equal(state.metrics.layoutReads, 0, "Runtime must not perform layout reads");
   assert.equal(home.rootClasses.writes.length, 0, "Runtime must not write classes");
   assert.ok(home.observers.every((observer) => !observer.options?.childList && !observer.options?.subtree));
+
+  const multi = makeFixture({ nativeAppearance: "dark" });
+  vm.runInNewContext(multi.payloadFor({
+    multiImage: true,
+    art: {
+      home: { focusX: 0.62, focusY: 0.48, fit: "cover" },
+      task: { focusX: 0.5, focusY: 0.42, fit: "contain" },
+      sidebar: { focusX: 0.5, focusY: 0.5, fit: "cover" },
+    },
+  }, {
+    base: "data:image/png;base64,AA==",
+    home: "data:image/png;base64,AQ==",
+    task: "data:image/png;base64,Ag==",
+    sidebar: "data:image/png;base64,Aw==",
+  }), multi.context);
+  assert.equal(multi.attrs.get("data-dream-multi-art"), "true");
+  assert.equal(multi.rootStyle.values.get("--dream-skin-home-art"), 'url("blob:fixture-2")');
+  assert.equal(multi.rootStyle.values.get("--dream-skin-task-art"), 'url("blob:fixture-3")');
+  assert.equal(multi.rootStyle.values.get("--dream-skin-sidebar-art"), 'url("blob:fixture-4")');
+  assert.equal(multi.rootStyle.values.get("--ds-home-art-position"), "62.00% 48.00%");
+  assert.equal(multi.rootStyle.values.get("--ds-task-art-position"), "50.00% 42.00%");
+  assert.equal(multi.rootStyle.values.get("--ds-task-art-size"), "contain");
+  assert.equal(multi.window.__CODEX_DREAM_SKIN_STATE__.cleanup(), true);
+  assert.deepEqual(multi.revoked, [
+    "blob:fixture-1", "blob:fixture-2", "blob:fixture-3", "blob:fixture-4",
+  ]);
 
   const observer = home.observers[0];
   observer.callback([]);

@@ -37,7 +37,7 @@ const stableTestidLiteral = (testid) => {
   }
   return JSON.stringify(`[data-testid="${testid}"]`);
 };
-const SKIN_VERSION = "1.3.3";
+const SKIN_VERSION = "1.4.0";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const CDP_ID_PATTERN = /^[A-Za-z0-9._-]{1,200}$/;
 const MAX_ART_BYTES = 16 * 1024 * 1024;
@@ -477,10 +477,20 @@ async function loadTheme(themeDir) {
   if (raw.schemaVersion !== 1 || typeof raw.image !== "string" || !raw.image) {
     throw new Error(`${configPath} has an unsupported schema or image field`);
   }
-  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(raw.image)) {
-    throw new Error(`${configPath} has an invalid image field`);
-  }
-  if (path.basename(raw.image) !== raw.image) throw new Error("Theme image must stay inside its theme directory");
+  const imageName = (value, fallback, name) => {
+    const normalized = value === undefined ? fallback : value;
+    if (
+      typeof normalized !== "string"
+      || !normalized
+      || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(normalized)
+    ) {
+      throw new Error(`${configPath} has an invalid ${name} field`);
+    }
+    if (path.basename(normalized) !== normalized) {
+      throw new Error(`Theme ${name} must stay inside its theme directory`);
+    }
+    return normalized;
+  };
   const text = (value, fallback, max, name) => {
     if (value === undefined) return fallback;
     if (typeof value !== "string" || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(value)) {
@@ -520,11 +530,32 @@ async function loadTheme(themeDir) {
     throw new Error(`${configPath} has an invalid art field`);
   }
   const rawArt = raw.art || {};
+  const surfaceArt = (value, name) => {
+    if (value === undefined) return undefined;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`${configPath} has an invalid art.${name} field`);
+    }
+    const normalized = {
+      focusX: unit(value.focusX, `art.${name}.focusX`),
+      focusY: unit(value.focusY, `art.${name}.focusY`),
+      fit: choice(value.fit, `art.${name}.fit`, ["auto", "cover", "contain"]),
+    };
+    return Object.fromEntries(Object.entries(normalized).filter(([, entry]) => entry !== undefined));
+  };
   const art = {
     focusX: unit(rawArt.focusX, "art.focusX"),
     focusY: unit(rawArt.focusY, "art.focusY"),
     safeArea: choice(rawArt.safeArea, "art.safeArea", ["auto", "left", "right", "center", "none"]),
     taskMode: choice(rawArt.taskMode, "art.taskMode", ["auto", "ambient", "banner", "off"]),
+    home: surfaceArt(rawArt.home, "home"),
+    task: surfaceArt(rawArt.task, "task"),
+    sidebar: surfaceArt(rawArt.sidebar, "sidebar"),
+  };
+  const images = {
+    base: imageName(raw.image, null, "image"),
+    home: imageName(raw.homeImage, raw.image, "homeImage"),
+    task: imageName(raw.taskImage, raw.image, "taskImage"),
+    sidebar: imageName(raw.sidebarImage, raw.image, "sidebarImage"),
   };
   const theme = {
     schemaVersion: 1,
@@ -536,7 +567,11 @@ async function loadTheme(themeDir) {
     projectLabel: text(raw.projectLabel, "◉  选择项目", 80, "projectLabel"),
     statusText: text(raw.statusText, "DREAM SKIN ONLINE", 80, "statusText"),
     quote: text(raw.quote, "MAKE SOMETHING WONDERFUL", 80, "quote"),
-    image: raw.image,
+    image: images.base,
+    homeImage: images.home,
+    taskImage: images.task,
+    sidebarImage: images.sidebar,
+    multiImage: new Set(Object.values(images)).size > 1,
     colorMode: rawColors ? "explicit" : "auto",
     explicitColorKeys: rawColors ? colorKeys.filter((key) => Object.hasOwn(rawColors, key)) : [],
     colors: {
@@ -556,47 +591,57 @@ async function loadTheme(themeDir) {
   if (Object.values(art).some((value) => value !== undefined)) {
     theme.art = Object.fromEntries(Object.entries(art).filter(([, value]) => value !== undefined));
   }
-  const requestedImagePath = path.join(assetsRoot, theme.image);
-  let imagePath;
-  try {
-    imagePath = await fs.realpath(requestedImagePath);
-  } catch (error) {
-    if (error.code === "ENOENT") throw new Error(`Theme image is missing: ${requestedImagePath}`);
-    throw error;
-  }
-  assertContainedPath(assetsRoot, imagePath, "Theme image");
-  const imageStat = await fs.stat(imagePath);
-  const extension = path.extname(theme.image).toLowerCase();
-  if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
-    throw new Error(`Unsupported theme image format: ${extension || "missing"}`);
-  }
-  let imageHandle;
-  try {
-    imageHandle = await fs.open(imagePath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
-  } catch (error) {
-    if (error.code === "ELOOP") throw new Error("Theme image changed into a symbolic link while loading");
-    throw error;
-  }
-  try {
-    const openedStat = await imageHandle.stat();
-    if (
-      !imageStat.isFile()
-      || !openedStat.isFile()
-      || imageStat.dev !== openedStat.dev
-      || imageStat.ino !== openedStat.ino
-      || openedStat.size < 1
-      || openedStat.size > MAX_ART_BYTES
-    ) {
-      throw new Error(`Theme image must be a stable non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+  const loadedByName = new Map();
+  const arts = {};
+  for (const [surface, filename] of Object.entries(images)) {
+    if (!loadedByName.has(filename)) {
+      const requestedImagePath = path.join(assetsRoot, filename);
+      let imagePath;
+      try {
+        imagePath = await fs.realpath(requestedImagePath);
+      } catch (error) {
+        if (error.code === "ENOENT") {
+          throw new Error(`Theme ${surface === "base" ? "image" : `${surface}Image`} is missing: ${requestedImagePath}`);
+        }
+        throw error;
+      }
+      assertContainedPath(assetsRoot, imagePath, `Theme ${surface === "base" ? "image" : `${surface}Image`}`);
+      const imageStat = await fs.stat(imagePath);
+      const extension = path.extname(filename).toLowerCase();
+      if (![".png", ".jpg", ".jpeg", ".webp"].includes(extension)) {
+        throw new Error(`Unsupported theme image format: ${extension || "missing"}`);
+      }
+      let imageHandle;
+      try {
+        imageHandle = await fs.open(imagePath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+      } catch (error) {
+        if (error.code === "ELOOP") throw new Error("Theme image changed into a symbolic link while loading");
+        throw error;
+      }
+      try {
+        const openedStat = await imageHandle.stat();
+        if (
+          !imageStat.isFile()
+          || !openedStat.isFile()
+          || imageStat.dev !== openedStat.dev
+          || imageStat.ino !== openedStat.ino
+          || openedStat.size < 1
+          || openedStat.size > MAX_ART_BYTES
+        ) {
+          throw new Error(`Theme image must be a stable non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+        }
+        const bytes = await imageHandle.readFile();
+        if (bytes.length < 1 || bytes.length > MAX_ART_BYTES) {
+          throw new Error(`Theme image must be a non-empty file no larger than ${MAX_ART_BYTES} bytes`);
+        }
+        loadedByName.set(filename, { bytes, extension, imagePath });
+      } finally {
+        await imageHandle.close();
+      }
     }
-    const art = await imageHandle.readFile();
-    if (art.length < 1 || art.length > MAX_ART_BYTES) {
-      throw new Error(`Theme image must be a non-empty file no larger than ${MAX_ART_BYTES} bytes`);
-    }
-    return { art, assetsRoot, extension, imagePath, theme };
-  } finally {
-    await imageHandle.close();
+    arts[surface] = loadedByName.get(filename);
   }
+  return { arts, assetsRoot, theme };
 }
 
 async function loadStaticPayloadAssets() {
@@ -618,25 +663,41 @@ function invalidateStaticPayloadAssets() {
   staticPayloadAssets = null;
 }
 
-async function loadPayload(themeDir) {
+export async function loadPayload(themeDir) {
   const startedAt = performance.now();
   const [staticAssets, loaded] = await Promise.all([
     loadStaticPayloadAssets(),
     loadTheme(themeDir),
   ]);
   const { css, template } = staticAssets;
-  const { art, extension, theme } = loaded;
+  const { arts, theme } = loaded;
   const styleRevision = createHash("sha256").update(css).digest("hex").slice(0, 20);
-  const artMetadata = readImageMetadata(art, extension);
-  if (!artMetadata) {
-    throw new Error("Theme image metadata is invalid or exceeds the 16384px / 50MP safety limit");
+  const dataUrlByArtKey = new Map();
+  const artMetadataBySurface = {};
+  const artKeys = {};
+  for (const [surface, entry] of Object.entries(arts)) {
+    const metadata = readImageMetadata(entry.bytes, entry.extension);
+    if (!metadata) {
+      throw new Error(`Theme ${surface} image metadata is invalid or exceeds the 16384px / 50MP safety limit`);
+    }
+    const mime = entry.extension === ".jpg" || entry.extension === ".jpeg" ? "image/jpeg"
+      : entry.extension === ".webp" ? "image/webp" : "image/png";
+    artMetadataBySurface[surface] = metadata;
+    artKeys[surface] = createHash("sha256").update(entry.bytes).digest("hex").slice(0, 20);
+    if (!dataUrlByArtKey.has(artKeys[surface])) {
+      dataUrlByArtKey.set(artKeys[surface], `data:${mime};base64,${entry.bytes.toString("base64")}`);
+    }
   }
-  const artKey = createHash("sha256").update(art).digest("hex").slice(0, 20);
-  theme.artMetadata = artMetadata;
-  theme.artKey = artKey;
-  const mime = extension === ".jpg" || extension === ".jpeg" ? "image/jpeg"
-    : extension === ".webp" ? "image/webp" : "image/png";
-  const artDataUrl = `data:${mime};base64,${art.toString("base64")}`;
+  const artDataUrls = { base: dataUrlByArtKey.get(artKeys.base) };
+  for (const surface of ["home", "task", "sidebar"]) {
+    if (artKeys[surface] !== artKeys.base) {
+      artDataUrls[surface] = dataUrlByArtKey.get(artKeys[surface]);
+    }
+  }
+  theme.artMetadata = artMetadataBySurface.base;
+  theme.artMetadataBySurface = artMetadataBySurface;
+  theme.artKey = artKeys.base;
+  theme.artKeys = artKeys;
   const revision = createHash("sha256")
     .update(SKIN_VERSION)
     .update(css)
@@ -646,13 +707,14 @@ async function loadPayload(themeDir) {
     .slice(0, 20);
   const payload = template
     .replace("__DREAM_SKIN_CSS_JSON__", JSON.stringify(css))
-    .replace("__DREAM_SKIN_ART_JSON__", JSON.stringify(artDataUrl))
+    .replace("__DREAM_SKIN_ART_JSON__", JSON.stringify(artDataUrls))
     .replace("__DREAM_SKIN_THEME_JSON__", JSON.stringify(theme))
     .replace("__DREAM_SKIN_VERSION_JSON__", JSON.stringify(SKIN_VERSION))
     .replace("__DREAM_SKIN_STYLE_REVISION_JSON__", JSON.stringify(styleRevision))
     .replace("__DREAM_SKIN_PAYLOAD_REVISION_JSON__", JSON.stringify(revision));
   return {
-    imageBytes: art.length,
+    imageBytes: [...new Map(Object.values(arts).map((entry) => [entry.imagePath, entry])).values()]
+      .reduce((total, entry) => total + entry.bytes.length, 0),
     payload,
     revision,
     theme,
@@ -829,8 +891,8 @@ async function presentOperationUi(session, token, state, message, timeoutMs = 10
   return bestEffortOperationUi(session, "show", token, state, message, timeoutMs);
 }
 
-async function removeFromSession(session) {
-  return session.evaluate(`(() => {
+export function rendererRemoveExpression() {
+  return `(() => {
     window.__CODEX_DREAM_SKIN_DISABLED__ = true;
     const state = window.__CODEX_DREAM_SKIN_STATE__;
     let cleaned = false;
@@ -855,11 +917,15 @@ async function removeFromSession(session) {
     document.getElementById('codex-dream-skin-style')?.remove();
     delete window.__CODEX_DREAM_SKIN_STATE__;
     return true;
-  })()`);
+  })()`;
 }
 
-async function verifyRemovedSession(session) {
-  return session.evaluate(`(() => {
+async function removeFromSession(session) {
+  return session.evaluate(rendererRemoveExpression());
+}
+
+export function rendererVerifyRemovedExpression() {
+  return `(() => {
     const root = document.documentElement;
     const hasAttributes = [...root.attributes].some((attribute) =>
       attribute.name.startsWith('data-dream-'));
@@ -871,11 +937,15 @@ async function verifyRemovedSession(session) {
     return !hasAttributes && !hasVariables && !hasSheets &&
       !document.getElementById('codex-dream-skin-style') &&
       !window.__CODEX_DREAM_SKIN_STATE__;
-  })()`);
+  })()`;
 }
 
-async function verifySession(session, expectedThemeId = null, expectedRevision = null) {
-  return session.evaluate(`(() => {
+async function verifyRemovedSession(session) {
+  return session.evaluate(rendererVerifyRemovedExpression());
+}
+
+export function rendererVerifyExpression(expectedThemeId = null, expectedRevision = null) {
+  return `(() => {
     const box = (node) => {
       if (!node) return null;
       const r = node.getBoundingClientRect();
@@ -974,7 +1044,11 @@ async function verifySession(session, expectedThemeId = null, expectedRevision =
       suggestionCardsOptional: result.homeRoute && result.visibleCardCount === 0,
     };
     return result;
-  })()`);
+  })()`;
+}
+
+async function verifySession(session, expectedThemeId = null, expectedRevision = null) {
+  return session.evaluate(rendererVerifyExpression(expectedThemeId, expectedRevision));
 }
 
 async function waitForVerifiedSession(session, timeoutMs, expectedThemeId = null, expectedRevision = null) {

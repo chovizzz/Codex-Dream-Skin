@@ -1,6 +1,6 @@
 {
   "name": "codex-dream-skin-studio",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,6 @@
     "doctor": "./scripts/doctor-macos.sh"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

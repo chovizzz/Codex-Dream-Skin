@@ -48,6 +48,34 @@ previews and must never be imported as wallpapers.
 
 ## Runtime
 
+### okkskin Node Inspector pulse
+
+The macOS Node Inspector pulse transport is adapted from the implementation in
+[okkskin](https://github.com/fanbidog/okkskin), version 0.2.2 / commit
+`f2835e37f4d7f048f9270d62b67f71eb750e7fe1`.
+
+MIT License
+
+Copyright (c) 2026 OkkMax
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 - The macOS package does not redistribute Node.js. It validates and uses the
   Node.js executable already signed and bundled inside the user's official
   Codex desktop application.
@@ -67,4 +95,8 @@ at `windows/installer/languages/Inno-Setup-License.txt`.
 
 ## Security model
 
-Themes are applied through Chromium DevTools Protocol on **loopback only**. While a themed session is running, treat the local debugging port as sensitive: do not run untrusted local software that could attach to it. Use the Restore launcher to tear down the themed session and debugging port.
+macOS themes are applied through a short Node Inspector pulse on loopback
+`9229`. The listener is accepted only when its PID matches the verified Codex
+main process, and Inspector is closed immediately after use. The lightweight
+PID watcher does not retain a debugging endpoint. Do not run untrusted local
+software while an apply, verify, or restore pulse is in progress.
